@@ -1,11 +1,12 @@
 'use client'
 
 import { useContext, useState } from 'react'
+
 import { AuthContext } from '@/context/auth-context'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card } from '@/components/ui/card'
 import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
 interface RegisterPageProps {
   onSwitchToLogin: () => void
@@ -17,18 +18,18 @@ export default function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   })
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+  const passwordMismatch = formData.confirmPassword.length > 0 && formData.password !== formData.confirmPassword
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [event.target.name]: event.target.value })
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (formData.password !== formData.confirmPassword) {
-      return
-    }
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (passwordMismatch) return
     await register(formData.name, formData.email, formData.password)
   }
 
@@ -37,10 +38,11 @@ export default function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
       <Card className="w-full max-w-md p-8 bg-white shadow-2xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Create Account</h1>
-          <p className="text-slate-600 mt-2">ADMIN HR System</p>
+          <p className="text-slate-600 mt-2">Create a local demo account and matching employee profile.</p>
         </div>
 
         {error && <Alert className="mb-4 bg-red-50 border-red-200 text-red-800">{error}</Alert>}
+        {passwordMismatch && <Alert className="mb-4 bg-amber-50 border-amber-200 text-amber-800">Passwords do not match.</Alert>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -76,7 +78,7 @@ export default function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder="••••••••"
+              placeholder="Minimum 6 characters"
               disabled={isLoading}
               required
             />
@@ -89,7 +91,7 @@ export default function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
               name="confirmPassword"
               value={formData.confirmPassword}
               onChange={handleChange}
-              placeholder="••••••••"
+              placeholder="Repeat your password"
               disabled={isLoading}
               required
             />
@@ -97,7 +99,7 @@ export default function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
 
           <Button
             type="submit"
-            disabled={isLoading || formData.password !== formData.confirmPassword}
+            disabled={isLoading || passwordMismatch}
             className="w-full bg-blue-600 hover:bg-blue-700"
           >
             {isLoading ? 'Creating Account...' : 'Sign Up'}

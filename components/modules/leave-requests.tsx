@@ -23,11 +23,16 @@ export default function LeaveRequests({ isRequestForm = false }: LeaveRequestsPr
     reason: ''
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (user) {
-      submitLeaveRequest({
-        employeeId: user.id,
+    if (!user?.employeeId) {
+      alert("Error: You don't have an associated employee record. Please contact your administrator.")
+      return
+    }
+
+    try {
+      await submitLeaveRequest({
+        employeeId: user.employeeId,
         employeeName: user.name,
         startDate: formData.startDate,
         endDate: formData.endDate,
@@ -36,6 +41,9 @@ export default function LeaveRequests({ isRequestForm = false }: LeaveRequestsPr
         status: 'pending'
       })
       setFormData({ startDate: '', endDate: '', type: 'annual', reason: '' })
+      alert("Leave request submitted successfully!")
+    } catch (err: any) {
+      alert("Failed to submit leave request: " + (err.message || "Unknown error"))
     }
   }
 

@@ -1,14 +1,21 @@
 'use client'
 
-import { createContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useEffect, useMemo, useState, ReactNode } from 'react'
+
+import { DEMO_APP_STATE_KEY, DEMO_AUTH_STATE_KEY, createId } from '@/lib/demo-storage'
 
 export interface User {
   id: string
   email: string
   name: string
   role: 'employee' | 'manager' | 'admin'
+  employeeId?: string
   department?: string
   position?: string
+}
+
+interface StoredAccount extends User {
+  password: string
 }
 
 interface AuthContextType {
@@ -16,102 +23,251 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
+  loginAsDemo: () => void
   isLoading: boolean
   error: string | null
 }
+
+const defaultAccounts: StoredAccount[] = [
+  {
+    id: 'user-admin',
+    email: 'nada.br@intraconnect.com',
+    name: 'Nada Ben Romdhane',
+    role: 'admin',
+    employeeId: '1',
+    department: 'Executive',
+    position: 'Chief Executive Officer',
+    password: 'demo123',
+  },
+  {
+    id: 'user-manager',
+    email: 'akram.tr@intraconnect.com',
+    name: 'Akram Trimech',
+    role: 'manager',
+    employeeId: '2',
+    department: 'Engineering',
+    position: 'VP of Engineering',
+    password: 'demo123',
+  },
+  {
+    id: 'user-employee',
+    email: 'olfa.hm@intraconnect.com',
+    name: 'Olfa Hammami',
+    role: 'employee',
+    employeeId: '7',
+    department: 'Engineering',
+    position: 'Backend Developer',
+    password: 'demo123',
+  },
+]
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   login: async () => {},
   register: async () => {},
   logout: () => {},
+  loginAsDemo: () => {},
   isLoading: false,
   error: null,
 })
 
+function readStoredAuthState() {
+  if (typeof window === 'undefined') {
+    return { user: null as User | null, accounts: defaultAccounts }
+  }
+
+  const stored = window.localStorage.getItem(DEMO_AUTH_STATE_KEY)
+  if (!stored) {
+    return { user: null as User | null, accounts: defaultAccounts }
+  }
+
+  try {
+    const parsed = JSON.parse(stored)
+    return {
+      user: (parsed.user as User | null) || null,
+      accounts: (parsed.accounts as StoredAccount[]) || defaultAccounts,
+    }
+  } catch {
+    return { user: null as User | null, accounts: defaultAccounts }
+  }
+}
+
+function enrichFromEmployee(email: string) {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const stored = window.localStorage.getItem(DEMO_APP_STATE_KEY)
+    if (!stored) return {}
+
+    const parsed = JSON.parse(stored)
+    const employee = parsed?.employees?.find?.((item: any) => item.email?.toLowerCase() === email.toLowerCase())
+
+    if (!employee) return {}
+
+    return {
+      employeeId: employee.id as string,
+      department: employee.department as string,
+      position: employee.position as string,
+      name: employee.name as string,
+    }
+  } catch {
+    return {}
+  }
+}
+
+function persistAuthState(user: User | null, accounts: StoredAccount[]) {
+  if (typeof window === 'undefined') return
+
+  window.localStorage.setItem(
+    DEMO_AUTH_STATE_KEY,
+    JSON.stringify({ user, accounts }),
+  )
+}
+
+function ensureEmployeeForAccount(account: StoredAccount) {
+  if (typeof window === 'undefined') return account
+
+  const enriched = enrichFromEmployee(account.email)
+  if (!enriched.employeeId) {
+    return account
+  }
+
+  return {
+    ...account,
+    ...enriched,
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [accounts, setAccounts] = useState<StoredAccount[]>(defaultAccounts)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Load user from localStorage on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('sprint1_user')
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser))
-      } catch (e) {
-        localStorage.removeItem('sprint1_user')
-      }
-    }
+    const stored = readStoredAuthState()
+    const hydratedAccounts = stored.accounts.map(ensureEmployeeForAccount)
+    const hydratedUser = stored.user
+      ? ensureEmployeeForAccount({
+          ...stored.user,
+          password: '',
+        })
+      : null
+
+    setAccounts(hydratedAccounts)
+    setUser(hydratedUser ? {
+      id: hydratedUser.id,
+      email: hydratedUser.email,
+      name: hydratedUser.name,
+      role: hydratedUser.role,
+      employeeId: hydratedUser.employeeId,
+      department: hydratedUser.department,
+      position: hydratedUser.position,
+    } : null)
+    persistAuthState(hydratedUser ? {
+      id: hydratedUser.id,
+      email: hydratedUser.email,
+      name: hydratedUser.name,
+      role: hydratedUser.role,
+      employeeId: hydratedUser.employeeId,
+      department: hydratedUser.department,
+      position: hydratedUser.position,
+    } : null, hydratedAccounts)
     setIsLoading(false)
   }, [])
 
   const login = async (email: string, password: string) => {
-    setError(null)
     setIsLoading(true)
-    
+    setError(null)
+
     try {
-      // Demo users for testing
-      const demoUsers: Record<string, User> = {
-        'employee@example.com': {
-          id: '1',
-          email: 'employee@example.com',
-          name: 'John Employee',
-          role: 'employee',
-          department: 'IT',
-          position: 'Developer'
-        },
-        'manager@example.com': {
-          id: '2',
-          email: 'manager@example.com',
-          name: 'Jane Manager',
-          role: 'manager',
-          department: 'IT',
-          position: 'Team Lead'
-        },
-        'admin@example.com': {
-          id: '3',
-          email: 'admin@example.com',
-          name: 'Admin User',
-          role: 'admin',
-          department: 'HR',
-          position: 'Administrator'
-        }
+      const normalizedEmail = email.trim().toLowerCase()
+      const account = accounts.find(item => item.email.toLowerCase() === normalizedEmail)
+
+      if (!account || account.password !== password) {
+        throw new Error('Invalid email or password. Use one of the demo accounts or create a new one.')
       }
 
-      const foundUser = demoUsers[email.toLowerCase()]
-      if (foundUser && password === 'demo123') {
-        setUser(foundUser)
-        localStorage.setItem('sprint1_user', JSON.stringify(foundUser))
-      } else {
-        setError('Invalid email or password')
+      const hydrated = ensureEmployeeForAccount(account)
+      const nextUser: User = {
+        id: hydrated.id,
+        email: hydrated.email,
+        name: hydrated.name,
+        role: hydrated.role,
+        employeeId: hydrated.employeeId,
+        department: hydrated.department,
+        position: hydrated.position,
       }
-    } catch (err) {
-      setError('Login failed')
+
+      setUser(nextUser)
+      persistAuthState(nextUser, accounts.map(ensureEmployeeForAccount))
+    } catch (err: any) {
+      setError(err.message || 'Login failed')
     } finally {
       setIsLoading(false)
     }
   }
 
   const register = async (name: string, email: string, password: string) => {
-    setError(null)
     setIsLoading(true)
-    
+    setError(null)
+
     try {
-      const newUser: User = {
-        id: Date.now().toString(),
-        email: email.toLowerCase(),
+      const normalizedEmail = email.trim().toLowerCase()
+      if (accounts.some(item => item.email.toLowerCase() === normalizedEmail)) {
+        throw new Error('An account with this email already exists.')
+      }
+
+      const employeeId = createId('emp')
+      const accountId = createId('user')
+
+      if (typeof window !== 'undefined') {
+        const stored = window.localStorage.getItem(DEMO_APP_STATE_KEY)
+        const parsed = stored ? JSON.parse(stored) : {}
+        const employees = Array.isArray(parsed?.employees) ? parsed.employees : []
+        parsed.employees = [
+          ...employees,
+          {
+            id: employeeId,
+            name,
+            email: normalizedEmail,
+            phone: '+216 00 000 000',
+            department: 'General',
+            position: 'New Employee',
+            joinDate: new Date().toISOString().split('T')[0],
+            status: 'active',
+          },
+        ]
+        window.localStorage.setItem(DEMO_APP_STATE_KEY, JSON.stringify(parsed))
+      }
+
+      const newAccount: StoredAccount = {
+        id: accountId,
+        email: normalizedEmail,
         name,
         role: 'employee',
+        employeeId,
         department: 'General',
-        position: 'New Employee'
+        position: 'New Employee',
+        password,
       }
-      
-      setUser(newUser)
-      localStorage.setItem('sprint1_user', JSON.stringify(newUser))
-    } catch (err) {
-      setError('Registration failed')
+
+      const nextAccounts = [...accounts, newAccount]
+      const nextUser: User = {
+        id: newAccount.id,
+        email: newAccount.email,
+        name: newAccount.name,
+        role: newAccount.role,
+        employeeId: newAccount.employeeId,
+        department: newAccount.department,
+        position: newAccount.position,
+      }
+
+      setAccounts(nextAccounts)
+      setUser(nextUser)
+      persistAuthState(nextUser, nextAccounts)
+    } catch (err: any) {
+      setError(err.message || 'Registration failed')
     } finally {
       setIsLoading(false)
     }
@@ -119,12 +275,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem('sprint1_user')
+    persistAuthState(null, accounts)
   }
 
-  return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading, error }}>
-      {children}
-    </AuthContext.Provider>
+  const loginAsDemo = () => {
+    const demoAccount = ensureEmployeeForAccount(defaultAccounts[0])
+    const demoUser: User = {
+      id: demoAccount.id,
+      email: demoAccount.email,
+      name: demoAccount.name,
+      role: demoAccount.role,
+      employeeId: demoAccount.employeeId,
+      department: demoAccount.department,
+      position: demoAccount.position,
+    }
+
+    setError(null)
+    setUser(demoUser)
+    persistAuthState(demoUser, accounts)
+  }
+
+  const value = useMemo(
+    () => ({
+      user,
+      login,
+      register,
+      logout,
+      loginAsDemo,
+      isLoading,
+      error,
+    }),
+    [user, isLoading, error, accounts],
   )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

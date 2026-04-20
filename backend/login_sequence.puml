@@ -1,0 +1,59 @@
+@startuml LoginSequence
+title Login Sequence Diagram
+
+actor Client
+participant AuthController
+participant AuthService
+participant UserService
+participant AuthHelpers
+participant JwtService
+database PrismaService
+participant AuditService
+
+Client -> AuthController : POST /api/v1/auth/login (email, password)
+activate AuthController
+
+AuthController -> AuthService : login({email, password})
+activate AuthService
+
+AuthService -> UserService : findUser(email)
+activate UserService
+
+UserService -> PrismaService : user.findUnique({email})
+activate PrismaService
+PrismaService --> UserService : userData (with passwordHash)
+deactivate PrismaService
+
+UserService --> AuthService : userData
+deactivate UserService
+
+AuthService -> AuthHelpers : verify(password, passwordHash)
+activate AuthHelpers
+AuthHelpers --> AuthService : isMatch (boolean)
+deactivate AuthHelpers
+
+alt isMatch is true
+    AuthService -> JwtService : sign(payload)
+    activate JwtService
+    JwtService --> AuthService : accessToken
+    deactivate JwtService
+
+    AuthService --> AuthController : {user, accessToken}
+    deactivate AuthService
+
+    AuthController -> AuthController : setCookie('accessToken', accessToken)
+    
+    AuthController -> AuditService : log("User logged in", userId)
+    activate AuditService
+    AuditService --> AuthController : Log created
+    deactivate AuditService
+
+    AuthController --> Client : 200 OK (User Data)
+else isMatch is false
+    AuthService --> AuthController : Throw UnauthorizedException
+    deactivate AuthService
+    AuthController --> Client : 401 Unauthorized
+end
+deactivate AuthController
+
+@enduml

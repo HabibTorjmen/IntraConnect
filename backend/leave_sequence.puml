@@ -1,0 +1,34 @@
+@startuml LeaveRequestSequence
+title Leave Request Submission Sequence
+
+actor Employee as "Employee (User)"
+participant LeaveController
+participant LeaveService
+database PrismaService
+participant AuditInterceptor
+
+Employee -> LeaveController : POST /api/v1/leave (CreateLeaveDTO)
+activate LeaveController
+
+LeaveController -> LeaveService : create(data)
+activate LeaveService
+
+LeaveService -> PrismaService : leaveRequest.create(data: {status: 'PENDING'})
+activate PrismaService
+PrismaService --> LeaveService : New Leave Request
+deactivate PrismaService
+
+LeaveService --> LeaveController : New Leave Request
+deactivate LeaveService
+
+LeaveController --> Employee : 201 Created
+
+' Automatic interception by AuditInterceptor
+LeaveController -> AuditInterceptor : [Intercept After Success]
+activate AuditInterceptor
+AuditInterceptor -> AuditService : log("POST /api/v1/leave", userId)
+deactivate AuditInterceptor
+
+deactivate LeaveController
+
+@enduml

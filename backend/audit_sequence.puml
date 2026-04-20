@@ -1,0 +1,26 @@
+@startuml AuditLogViewingSequence
+title Audit Log Viewing Sequence
+
+actor Admin
+participant AuditController
+participant AuditService
+database PrismaService
+
+Admin -> AuditController : GET /api/v1/audit
+activate AuditController
+
+AuditController -> AuditService : findAll()
+activate AuditService
+
+AuditService -> PrismaService : auditLog.findMany({include: user})
+activate PrismaService
+PrismaService --> AuditService : List of Audit Logs
+deactivate PrismaService
+
+AuditService --> AuditController : List of Audit Logs
+deactivate AuditService
+
+AuditController --> Admin : 200 OK (Audit Logs data)
+deactivate AuditController
+
+@enduml

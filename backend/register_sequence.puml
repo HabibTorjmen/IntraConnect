@@ -1,0 +1,45 @@
+@startuml RegisterSequence
+title Register Sequence Diagram
+
+actor Client
+participant AuthController
+participant AuthService
+participant AuthHelpers
+participant UserService
+database PrismaService
+participant AuditService
+
+Client -> AuthController : POST /api/v1/auth/register (name, email, password)
+activate AuthController
+
+AuthController -> AuthService : register(RegisterUserDTO)
+activate AuthService
+
+AuthService -> AuthHelpers : hash(user.password)
+activate AuthHelpers
+AuthHelpers --> AuthService : hashedPassword
+deactivate AuthHelpers
+
+AuthService -> UserService : createUser({username, email, passwordHash})
+activate UserService
+
+UserService -> PrismaService : user.create(data)
+activate PrismaService
+PrismaService --> UserService : Created User Data
+deactivate PrismaService
+
+UserService --> AuthService : User Object
+deactivate UserService
+
+AuthService --> AuthController : New Registered User
+deactivate AuthService
+
+AuthController -> AuditService : log("User registered", userId)
+activate AuditService
+AuditService --> AuthController : Log created
+deactivate AuditService
+
+AuthController --> Client : 201 Created (User Object)
+deactivate AuthController
+
+@enduml

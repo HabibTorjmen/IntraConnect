@@ -1,0 +1,18 @@
+﻿src/modules/post/post.controller.ts(10,10): error TS2305: Module '"@prisma/client"' has no exported member 'Post'.
+src/modules/post/post.service.ts(2,10): error TS2305: Module '"@prisma/client"' has no exported member 'Post'.
+src/modules/post/post.service.ts(11,34): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostWhereUniqueInput'. Did you mean 'UserWhereUniqueInput'?
+src/modules/post/post.service.ts(13,24): error TS2339: Property 'post' does not exist on type 'PrismaService'.
+src/modules/post/post.service.ts(21,21): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostWhereUniqueInput'. Did you mean 'UserWhereUniqueInput'?
+src/modules/post/post.service.ts(22,20): error TS2694: Namespace '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member 'PostWhereInput'.
+src/modules/post/post.service.ts(23,22): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostOrderByWithRelationInput'. Did you mean 'UserOrderByWithRelationInput'?
+src/modules/post/post.service.ts(26,24): error TS2339: Property 'post' does not exist on type 'PrismaService'.
+src/modules/post/post.service.ts(35,29): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostCreateInput'. Did you mean 'UserCreateInput'?
+src/modules/post/post.service.ts(36,24): error TS2339: Property 'post' does not exist on type 'PrismaService'.
+src/modules/post/post.service.ts(42,19): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostWhereUniqueInput'. Did you mean 'UserWhereUniqueInput'?
+src/modules/post/post.service.ts(43,18): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostUpdateInput'. Did you mean 'UserUpdateInput'?
+src/modules/post/post.service.ts(46,24): error TS2339: Property 'post' does not exist on type 'PrismaService'.
+src/modules/post/post.service.ts(52,30): error TS2724: '"C:/Users/islem/OneDrive/Bureau/copie/node_modules/.prisma/client/index".Prisma' has no exported member named 'PostWhereUniqueInput'. Did you mean 'UserWhereUniqueInput'?
+src/modules/post/post.service.ts(53,24): error TS2339: Property 'post' does not exist on type 'PrismaService'.
+src/modules/prisma/prisma.config.ts(1,37): error TS2307: Cannot find module '@prisma/client/runtime' or its corresponding type declarations.
+src/modules/user/user.controller.ts(24,40): error TS2345: Argument of type '{ name?: string; email: string; password: string; }' is not assignable to parameter of type 'UserCreateInput'.
+  Type '{ name?: string; email: string; password: string; }' is missing the following properties from type 'UserCreateInput': username, passwordHash

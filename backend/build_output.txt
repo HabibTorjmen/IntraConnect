@@ -1,0 +1,8 @@
+﻿
+> nest-typescript-starter@1.0.0 prebuild
+> rimraf dist
+
+
+> nest-typescript-starter@1.0.0 build
+> nest build
+

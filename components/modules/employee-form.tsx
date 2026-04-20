@@ -39,15 +39,26 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (employeeId) {
-      updateEmployee(employeeId, formData)
-    } else {
-      addEmployee(formData)
+    setIsLoadingForm(true)
+    setFormError(null)
+    try {
+      if (employeeId) {
+        await updateEmployee(employeeId, formData)
+      } else {
+        await addEmployee(formData)
+      }
+      onClose()
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to save employee')
+    } finally {
+      setIsLoadingForm(false)
     }
-    onClose()
   }
+
+  const [isLoadingForm, setIsLoadingForm] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   return (
     <div className="space-y-6">
@@ -58,17 +69,24 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
       </div>
 
       <Card className="p-6 bg-white max-w-2xl">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-            <Input
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="John Doe"
-              required
-            />
+        {formError && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-md text-sm">
+            {formError}
           </div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <fieldset disabled={isLoadingForm}>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
+                <Input
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -142,14 +160,17 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-              {employeeId ? 'Update Employee' : 'Add Employee'}
-            </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-          </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isLoadingForm}>
+                {isLoadingForm ? 'Saving...' : (employeeId ? 'Update Employee' : 'Add Employee')}
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose} disabled={isLoadingForm}>
+                Cancel
+              </Button>
+            </div>
+          </fieldset>
         </form>
       </Card>
     </div>

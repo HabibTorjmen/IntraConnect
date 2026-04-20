@@ -1,0 +1,49 @@
+@startuml
+actor User
+participant "Frontend (Next.js)" as Frontend
+participant "AuthController" as Controller
+participant "AuthService" as Service
+participant "UserService" as UserService
+database "Database (Prisma)" as DB
+participant "JWT Service" as JWT
+
+== Register Flow ==
+User -> Frontend : Fill register form
+Frontend -> Controller : POST /auth/register {email, name, password}
+Controller -> Service : register(registerDTO)
+Service -> UserService : createUser(registerDTO)
+UserService -> DB : INSERT new user
+DB --> UserService : Created user
+UserService --> Service : Created user
+Service --> Controller : Created user
+Controller --> Frontend : 201 Created user
+Frontend --> User : Show success / redirect
+
+== Login Flow ==
+User -> Frontend : Fill login form
+Frontend -> Controller : POST /auth/login {email, password}
+Controller -> Service : login(loginDTO)
+Service -> UserService : findUser(email)
+UserService -> DB : SELECT user WHERE email
+DB --> UserService : user data
+UserService --> Service : user
+
+alt User not found
+    Service --> Controller : UnauthorizedException
+    Controller --> Frontend : 401 Unauthorized
+else User found
+    Service -> Service : verify(password, passwordHash)
+
+    alt Password incorrect
+        Service --> Controller : UnauthorizedException
+        Controller --> Frontend : 401 Unauthorized
+    else Password correct
+        Service -> JWT : sign(payload)
+        JWT --> Service : accessToken
+
+        Service --> Controller : {user, accessToken}
+        Controller --> Frontend : 200 OK + token (cookie)
+        Frontend --> User : Access granted
+    end
+end
+@enduml

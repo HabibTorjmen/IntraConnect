@@ -1,0 +1,349 @@
+@startuml MainClassDiagram
+title Main Class Diagram - Virtide Intranet Project
+
+' Styling
+skinparam class {
+    BackgroundColor White
+    ArrowColor #2688d2
+    BorderColor #2688d2
+}
+
+package "Core Modules" {
+    class AppModule
+    class AuthModule
+    class UserModule
+    class EmployeeModule
+    class PrismaModule
+    class LoggerModule
+}
+
+package "Services" {
+    class AuthService {
+        +login(dto)
+        +register(dto)
+    }
+    class UserService {
+        +findUser(id)
+        +createUser(data)
+    }
+    class EmployeeService {
+        +findAll()
+        +findOne(id)
+        +create(dto)
+    }
+    class PrismaService <<Database>>
+}
+
+package "Domain Entities (Prisma)" {
+    class User {
+        +id: UUID
+        +username: String
+        +email: String
+        +passwordHash: String
+    }
+    
+    class Employee {
+        +id: UUID
+        +fullName: String
+        +department: String
+        +status: String
+        +managerId: UUID
+    }
+
+    class Role {
+        +id: UUID
+        +name: String
+    }
+
+    class JobTitle {
+        +id: UUID
+        +title: String
+        +level: String
+    }
+
+    class LeaveRequest {
+        +id: UUID
+        +startDate: DateTime
+        +endDate: DateTime
+        +status: String
+    }
+
+    class PayrollRecord {
+        +id: UUID
+        +period: String
+        +netAmount: Decimal
+    }
+
+    class OnboardingChecklist {
+        +id: UUID
+        +completed: Boolean
+    }
+
+    class Document {
+        +id: UUID
+        +title: String
+    }
+
+    class Notification {
+        +id: UUID
+        +message: String
+    }
+
+    class AuditLog {
+        +id: UUID
+        +action: String
+        +createdAt: DateTime
+    }
+
+    class Ticket {
+        +id: UUID
+        +title: String
+        +status: String
+        +priority: String
+    }
+}
+
+' Relations
+User "1" -- "0..1" Employee : owns
+User "1" -- "*" Role : has
+User "1" -- "*" Notification : receives
+User "1" -- "*" AuditLog : generates
+
+Employee "1" -- "*" LeaveRequest : requests
+Employee "1" -- "*" PayrollRecord : receives
+Employee "1" -- "0..1" OnboardingChecklist : has
+Employee "1" -- "*" Document : owns
+Employee "1" -- "*" Ticket : creates
+Employee "0..1" -- "*" Employee : manager-of
+Employee "*" -- "1" JobTitle : has
+
+@enduml
+
+@startuml RegisterSequence
+title Register Sequence Diagram (Enhanced)
+
+actor Client
+participant AuthController
+participant AuthService
+participant AuthHelpers
+participant UserService
+database PrismaService
+participant AuditService
+
+Client -> AuthController : POST /api/v1/auth/register (name, email, password)
+activate AuthController
+
+AuthController -> AuthService : register(RegisterUserDTO)
+activate AuthService
+
+AuthService -> AuthHelpers : hash(user.password)
+activate AuthHelpers
+AuthHelpers --> AuthService : hashedPassword
+deactivate AuthHelpers
+
+AuthService -> UserService : createUser({username, email, passwordHash})
+activate UserService
+
+UserService -> PrismaService : user.create(data)
+activate PrismaService
+PrismaService --> UserService : Created User Data
+deactivate PrismaService
+
+UserService --> AuthService : User Object
+deactivate UserService
+
+AuthService --> AuthController : New Registered User
+deactivate AuthService
+
+AuthController -> AuditService : log("User registered", userId)
+activate AuditService
+AuditService --> AuthController : Log created
+deactivate AuditService
+
+AuthController --> Client : 201 Created (User Object)
+deactivate AuthController
+
+@enduml
+
+@startuml LoginSequence
+title Login Sequence Diagram
+
+actor Client
+participant AuthController
+participant AuthService
+participant UserService
+participant AuthHelpers
+participant JwtService
+database PrismaService
+participant AuditService
+
+Client -> AuthController : POST /api/v1/auth/login
+activate AuthController
+
+AuthController -> AuthService : login(dto)
+activate AuthService
+
+AuthService -> UserService : findUser(email)
+activate UserService
+
+UserService -> PrismaService : user.findUnique({email})
+activate PrismaService
+PrismaService --> UserService : userData
+deactivate PrismaService
+
+UserService --> AuthService : userData
+deactivate UserService
+
+AuthService -> AuthHelpers : verify(pass, hash)
+activate AuthHelpers
+AuthHelpers --> AuthService : isMatch
+deactivate AuthHelpers
+
+alt isMatch is true
+    AuthService -> JwtService : sign(payload)
+    activate JwtService
+    JwtService --> AuthService : accessToken
+    deactivate JwtService
+
+    AuthService --> AuthController : {user, accessToken}
+    deactivate AuthService
+
+    AuthController -> AuthController : setCookie('accessToken')
+    
+    AuthController -> AuditService : log("User logged in", userId)
+    activate AuditService
+    AuditService --> AuthController : Log created
+    deactivate AuditService
+
+    AuthController --> Client : 200 OK (User Data)
+else isMatch is false
+    AuthService --> AuthController : 401 Unauthorized
+    deactivate AuthService
+    AuthController --> Client : Error Response
+end
+deactivate AuthController
+
+@enduml
+
+@startuml LeaveRequestStateDiagram
+title Leave Request Lifecycle
+
+[*] --> Pending : Submit Request
+
+state Pending {
+    [*] --> Evaluating
+    Evaluating --> ManagerReview : Notify Manager
+}
+
+Pending --> Approved : Manager Approves
+Pending --> Rejected : Manager Rejects
+
+Approved --> [*]
+Rejected --> [*]
+
+note right of Approved
+  Triggers Payroll update
+  and Notification
+end note
+
+@enduml
+
+@startuml LeaveRequestSequence
+title Leave Request Submission Sequence
+
+actor Employee as "Employee (User)"
+participant LeaveController
+participant LeaveService
+database PrismaService
+participant AuditInterceptor
+
+Employee -> LeaveController : POST /api/v1/leave (CreateLeaveDTO)
+activate LeaveController
+
+LeaveController -> LeaveService : create(data)
+activate LeaveService
+
+LeaveService -> PrismaService : leaveRequest.create(data: {status: 'PENDING'})
+activate PrismaService
+PrismaService --> LeaveService : New Leave Request
+deactivate PrismaService
+
+LeaveService --> LeaveController : New Leave Request
+deactivate LeaveService
+
+LeaveController --> Employee : 201 Created
+
+' Automatic interception by AuditInterceptor
+LeaveController -> AuditInterceptor : [Intercept After Success]
+activate AuditInterceptor
+AuditInterceptor -> AuditService : log("POST /api/v1/leave", userId)
+deactivate AuditInterceptor
+
+deactivate LeaveController
+
+@enduml
+
+@startuml AuditLogViewingSequence
+title Audit Log Viewing Sequence
+
+actor Admin
+participant AuditController
+participant AuditService
+database PrismaService
+
+Admin -> AuditController : GET /api/v1/audit
+activate AuditController
+
+AuditController -> AuditService : findAll()
+activate AuditService
+
+AuditService -> PrismaService : auditLog.findMany({include: user})
+activate PrismaService
+PrismaService --> AuditService : List of Audit Logs
+deactivate PrismaService
+
+AuditService --> AuditController : List of Audit Logs
+deactivate AuditService
+
+AuditController --> Admin : 200 OK (Audit Logs data)
+deactivate AuditController
+
+@enduml
+
+@startuml EmployeeManagementSequence
+title Employee Management Sequence
+
+actor HR
+participant EmployeeController
+participant EmployeeService
+database PrismaService
+participant AuditInterceptor
+
+HR -> EmployeeController : POST /api/v1/employee (CreateEmployeeDTO)
+activate EmployeeController
+
+EmployeeController -> EmployeeService : create(data)
+activate EmployeeService
+
+EmployeeService -> PrismaService : employee.create(data, {connect: user})
+activate PrismaService
+PrismaService --> EmployeeService : Created Employee
+deactivate PrismaService
+
+EmployeeService --> EmployeeController : Created Employee
+deactivate EmployeeService
+
+EmployeeController --> HR : 201 Created
+
+' Automatic interception by AuditInterceptor
+EmployeeController -> AuditInterceptor : [Intercept After Success]
+activate AuditInterceptor
+AuditInterceptor -> AuditService : log("POST /api/v1/employee", userId)
+deactivate AuditInterceptor
+
+deactivate EmployeeController
+
+@enduml
+
+
+

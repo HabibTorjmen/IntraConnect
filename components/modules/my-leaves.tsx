@@ -13,11 +13,11 @@ interface MyLeavesProps {
 
 export default function MyLeaves({ onSwitchToRequest }: MyLeavesProps) {
   const { user } = useContext(AuthContext)
-  const { leaveRequests, getEmployeeLeaves } = useContext(AppContext)
+  const { getEmployeeLeaves } = useContext(AppContext)
 
   if (!user) return null
 
-  const myLeaves = getEmployeeLeaves(user.id)
+  const myLeaves = getEmployeeLeaves(user.employeeId || user.id)
   const approved = myLeaves.filter(l => l.status === 'approved')
   const pending = myLeaves.filter(l => l.status === 'pending')
 

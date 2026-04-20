@@ -1,0 +1,62 @@
+﻿
+> nest-typescript-starter@1.0.0 start:dev
+> nest start --watch
+
+c[[90m11:05:35 PM[0m] Starting compilation in watch mode...
+
+[[90m11:05:39 PM[0m] Found 0 errors. Watching for file changes.
+
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+c[[90m11:06:17 PM[0m] File change detected. Starting incremental compilation...
+
+[[90m11:06:18 PM[0m] Found 0 errors. Watching for file changes.
+
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+c[[90m11:11:08 PM[0m] File change detected. Starting incremental compilation...
+
+[[90m11:11:10 PM[0m] Found 0 errors. Watching for file changes.
+
+c[[90m11:11:16 PM[0m] File change detected. Starting incremental compilation...
+
+[[90m11:11:17 PM[0m] Found 0 errors. Watching for file changes.
+
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+c[[90m11:14:12 PM[0m] File change detected. Starting incremental compilation...
+
+[[90m11:14:13 PM[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLoggerModule dependencies initialized[39m[38;5;3m +117ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +47ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +45ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +5ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mEmployeeModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAuthModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mUserModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/api/v1}:[39m[38;5;3m +225ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1, GET} route[39m[38;5;3m +7ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAuthController {/api/v1/auth}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/login, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/register, POST} route[39m[38;5;3m +3ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/auth/logout, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mUserController {/api/v1/users}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/users, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/users/user, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEmployeeController {/api/v1/employee}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/employee, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/employee, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/employee/:id, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/employee/:id, PUT} route[39m[38;5;3m +3ms[39m
+[32m[Nest] 27476  - [39m04/04/2026 11:14:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/employee/:id, DELETE} route[39m[38;5;3m +1ms[39m
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+prisma:info Starting a postgresql pool with 9 connections.
+[32m[Nest] 27476  - [39m04/04/2026 11:14:20 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +420ms[39m

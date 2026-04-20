@@ -1,0 +1,34 @@
+@startuml EmployeeManagementSequence
+title Employee Management Sequence
+
+actor HR
+participant EmployeeController
+participant EmployeeService
+database PrismaService
+participant AuditInterceptor
+
+HR -> EmployeeController : POST /api/v1/employee (CreateEmployeeDTO)
+activate EmployeeController
+
+EmployeeController -> EmployeeService : create(data)
+activate EmployeeService
+
+EmployeeService -> PrismaService : employee.create(data, {connect: user})
+activate PrismaService
+PrismaService --> EmployeeService : Created Employee
+deactivate PrismaService
+
+EmployeeService --> EmployeeController : Created Employee
+deactivate EmployeeService
+
+EmployeeController --> HR : 201 Created
+
+' Automatic interception by AuditInterceptor
+EmployeeController -> AuditInterceptor : [Intercept After Success]
+activate AuditInterceptor
+AuditInterceptor -> AuditService : log("POST /api/v1/employee", userId)
+deactivate AuditInterceptor
+
+deactivate EmployeeController
+
+@enduml

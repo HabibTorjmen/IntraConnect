@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") 
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  passwordHash  String
+  isActive      Boolean        @default(true)
+  employee      Employee?
+  roles         Role[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  documentLogs  DocumentAccessLog[]
+}
+
+model Employee {
+  id                  String               @id @default(uuid())
+  fullName            String
+  personalEmail       String?
+  phone               String?
+  address             String?
+  joinDate            DateTime             @default(now())
+  status              String               @default("active") // active, inactive, onboarding
+  
+  departmentId        String?
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  
+  jobTitleId          String?
+  jobTitle            JobTitle?            @relation(fields: [jobTitleId], references: [id])
+  
+  userId              String?              @unique
+  user                User?                @relation(fields: [userId], references: [id])
+  
+  managerId           String?
+  manager             Employee?            @relation("ManagerSubordinate", fields: [managerId], references: [id])
+  subordinates        Employee[]           @relation("ManagerSubordinate")
+  
+  leaveRequests       LeaveRequest[]
+  payrollRecords      PayrollRecord[]
+  onboardingChecklist OnboardingChecklist?
+  documents           Document[]
+  tickets             Ticket[]             @relation("TicketCreator")
+  assignedTickets     Ticket[]             @relation("TicketAssignee")
+  receivedFeedback    PerformanceFeedback[] @relation("ReceivedFeedback")
+  authoredFeedback     PerformanceFeedback[] @relation("AuthoredFeedback")
+  trainingPlans       TrainingPlan[]
+  ticketComments      TicketComment[]
+}
+
+model Department {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  employees Employee[]
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  users       User[]
+  permissions Permission[]
+  tools       Tool[]
+}
+
+model Permission {
+  id     String @id @default(uuid())
+  action String // e.g., "create", "read", "update", "delete"
+  module String // e.g., "employees", "tickets", "payroll"
+  roles  Role[]
+
+  @@unique([action, module])
+}
+
+model Tool {
+  id          String  @id @default(uuid())
+  name        String
+  category    String
+  url         String?
+  description String?
+  roles       Role[]
+}
+
+model JobTitle {
+  id        String     @id @default(uuid())
+  title     String
+  level     String?
+  employees Employee[]
+}
+
+model LeaveRequest {
+  id          String   @id @default(uuid())
+  startDate   DateTime
+  endDate     DateTime
+  type        String   // annual, sick, etc.
+  reason      String?
+  status      String   @default("pending") // pending, approved, rejected
+  createdAt   DateTime @default(now())
+  
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  
+  approvedById String?
+  // Logic for approver will be in code
+}
+
+model PayrollRecord {
+  id         String   @id @default(uuid())
+  period     String   // e.g., "2026-04"
+  netAmount  Decimal
+  payDate    DateTime @default(now())
+  pdfUrl     String?  // Storage path
+  status     String   @default("generated")
+  
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+}
+
+model OnboardingChecklist {
+  id         String           @id @default(uuid())
+  status     String           @default("in_progress") // in_progress, completed
+  tasks      OnboardingTask[]
+  employeeId String           @unique
+  employee   Employee         @relation(fields: [employeeId], references: [id])
+}
+
+model OnboardingTask {
+  id          String              @id @default(uuid())
+  title       String
+  description String?
+  isCompleted Boolean             @default(false)
+  checklistId String
+  checklist   OnboardingChecklist @relation(fields: [checklistId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  message   String
+  type      String?  // info, warning, error
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  module    String?
+  details   String?  // JSON string or long text
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  url         String   // file path or S3 link
+  filename    String?
+  size        Int?
+  type        String   // "personal", "company", "policy", "project"
+  category    String?  // "HR", "Technical", "Legal", etc.
+  version     Int      @default(1)
+  isLatest    Boolean  @default(true)
+  parentId    String?  // For versioning
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  
+  accessLogs  DocumentAccessLog[]
+}
+
+model DocumentAccessLog {
+  id         String   @id @default(uuid())
+  action     String   // "view", "download", "update"
+  createdAt  DateTime @default(now())
+  
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+  
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model Ticket {
+  id           String          @id @default(uuid())
+  title        String
+  description  String
+  status       String          @default("open")
+  priority     String          @default("medium")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  
+  // SLA Fields
+  slaDeadline  DateTime?
+  slaStatus    String          @default("ON_TRACK") // ON_TRACK, NEAR_BREACH, BREACHED
+  
+  categoryId   String?
+  category     TicketCategory? @relation(fields: [categoryId], references: [id])
+  
+  employeeId   String          @map("creatorId")
+  employee     Employee        @relation("TicketCreator", fields: [employeeId], references: [id])
+  
+  assignedToId String?
+  assignedTo   Employee?       @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  
+  location     String?         // Added for Facility Management (Building/Floor/Room)
+  
+  comments     TicketComment[]
+}
+
+model TicketCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  tickets     Ticket[]
+}
+
+model TicketComment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  
+  authorId  String
+  author    Employee @relation(fields: [authorId], references: [id])
+}
+model Survey {
+  id          String           @id @default(uuid())
+  title       String
+  description String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  questions   Json             // Questions as JSON array
+  responses   SurveyResponse[]
+}
+
+model SurveyResponse {
+  id        String   @id @default(uuid())
+  answers   Json     // Answers as JSON
+  createdAt DateTime @default(now())
+  surveyId  String
+  survey    Survey   @relation(fields: [surveyId], references: [id])
+  userId    String?
+}
+
+model PerformanceFeedback {
+  id          String   @id @default(uuid())
+  content     String
+  rating      Int?
+  createdAt   DateTime @default(now())
+  
+  employeeId  String // Recipient
+  employee    Employee @relation("ReceivedFeedback", fields: [employeeId], references: [id])
+  
+  authorId    String // Author
+  author      Employee @relation("AuthoredFeedback", fields: [authorId], references: [id])
+}
+
+model TrainingPlan {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  status      String   @default("planned")
+  createdAt   DateTime @default(now())
+  
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+}
