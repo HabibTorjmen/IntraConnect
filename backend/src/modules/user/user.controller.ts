@@ -19,13 +19,20 @@ export class UserController {
 
   @Post('user')
   async signupUser(
-    @Body() userData: { name: string; email: string; password: string },
+    @Body() userData: { name: string; email: string; password: string; roleId?: string },
   ): Promise<User> {
     const hashedPassword = await AuthHelpers.hash(userData.password);
     return this.userService.createUser({
       username: userData.name,
       email: userData.email,
       passwordHash: hashedPassword,
+      roles: userData.roleId
+        ? {
+            connect: {
+              id: userData.roleId,
+            },
+          }
+        : undefined,
     });
   }
 }

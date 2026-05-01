@@ -23,6 +23,10 @@ export class UpdateEmployeeDTO {
 
   @IsString()
   @IsOptional()
+  roleId?: string;
+
+  @IsString()
+  @IsOptional()
   managerId?: string;
 
   @IsString()

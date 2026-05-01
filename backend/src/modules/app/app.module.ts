@@ -21,6 +21,7 @@ import { FeedbackModule } from '../feedback/feedback.module';
 import { TrainingModule } from '../training/training.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { NotificationModule } from '../notification/notification.module';
+import { RoleModule } from '../role/role.module';
 
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditInterceptor } from '../../interceptors/audit.interceptor';
@@ -40,6 +41,7 @@ import { AuditInterceptor } from '../../interceptors/audit.interceptor';
     TrainingModule,
     DashboardModule,
     NotificationModule,
+    RoleModule,
     ConfigModule.forRoot({ isGlobal: true, load: [() => GLOBAL_CONFIG] }),
   ],
   controllers: [AppController],

@@ -13,7 +13,18 @@ export class UserService {
     return this.prisma.user.findUnique({
       where: userWhereUniqueInput,
       include: {
-        employee: true, // Crucial for frontend session state
+        employee: {
+          include: {
+            department: true,
+            jobTitle: true,
+            manager: true,
+          },
+        },
+        roles: {
+          include: {
+            permissions: true,
+          },
+        },
       },
     });
   }
@@ -32,6 +43,14 @@ export class UserService {
       cursor,
       where,
       orderBy,
+      include: {
+        employee: true,
+        roles: {
+          include: {
+            permissions: true,
+          },
+        },
+      },
     });
   }
 

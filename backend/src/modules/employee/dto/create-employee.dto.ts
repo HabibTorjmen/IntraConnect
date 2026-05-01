@@ -27,6 +27,10 @@ export class CreateEmployeeDTO {
 
   @IsString()
   @IsOptional()
+  roleId?: string;
+
+  @IsString()
+  @IsOptional()
   managerId?: string;
 
   @IsString()

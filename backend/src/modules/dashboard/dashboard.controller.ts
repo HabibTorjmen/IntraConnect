@@ -2,6 +2,7 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/auth.jwt.guard';
 import { AuthUser } from '../auth/auth.user.decorator';
+import { isDirector } from '../auth/auth-access.helper';
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
@@ -10,12 +11,10 @@ export class DashboardController {
 
   @Get('stats')
   async getStats(@AuthUser() user: any) {
-    // Check for admin/HR roles
-    const isAdmin = user.roles ? user.roles.some(r => r.name === 'ADMIN' || r.name === 'HR') : false;
-    
-    if (isAdmin) {
+    if (isDirector(user)) {
       return this.dashboardService.getAdminStats();
     }
-    return this.dashboardService.getEmployeeStats(user.id);
+
+    return this.dashboardService.getEmployeeStats(user.employee?.id, user.id);
   }
 }

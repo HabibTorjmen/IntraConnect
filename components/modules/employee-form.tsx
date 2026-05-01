@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 
 interface EmployeeFormProps {
   employeeId?: string
@@ -14,7 +13,7 @@ interface EmployeeFormProps {
 }
 
 export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps) {
-  const { employees, addEmployee, updateEmployee } = useContext(AppContext)
+  const { employees, roles, addEmployee, updateEmployee } = useContext(AppContext)
   const [formData, setFormData] = useState<Omit<Employee, 'id'>>({
     name: '',
     email: '',
@@ -22,7 +21,11 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
     department: '',
     position: '',
     joinDate: new Date().toISOString().split('T')[0],
-    status: 'active'
+    status: 'active',
+    roleId: '',
+    roleName: '',
+    roleCode: '',
+    permissions: [],
   })
 
   useEffect(() => {
@@ -35,6 +38,21 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
     }
   }, [employeeId, employees])
 
+  useEffect(() => {
+    if (employeeId || formData.roleId || roles.length === 0) return
+
+    const defaultRole = roles.find(role => role.code === 'employee') || roles[0]
+    if (!defaultRole) return
+
+    setFormData(current => ({
+      ...current,
+      roleId: defaultRole.id,
+      roleName: defaultRole.name,
+      roleCode: defaultRole.code,
+      permissions: defaultRole.permissions,
+    }))
+  }, [employeeId, formData.roleId, roles])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
@@ -44,10 +62,24 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
     setIsLoadingForm(true)
     setFormError(null)
     try {
+      const selectedRole = roles.find(role => role.id === formData.roleId)
+
+      if (!selectedRole) {
+        throw new Error('A role is required before creating a user.')
+      }
+
+      const payload = {
+        ...formData,
+        roleId: selectedRole.id,
+        roleName: selectedRole.name,
+        roleCode: selectedRole.code,
+        permissions: selectedRole.permissions,
+      }
+
       if (employeeId) {
-        await updateEmployee(employeeId, formData)
+        await updateEmployee(employeeId, payload)
       } else {
-        await addEmployee(formData)
+        await addEmployee(payload)
       }
       onClose()
     } catch (err: any) {
@@ -59,6 +91,7 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
 
   const [isLoadingForm, setIsLoadingForm] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const selectedRole = roles.find(role => role.id === formData.roleId)
 
   return (
     <div className="space-y-6">
@@ -157,6 +190,60 @@ export default function EmployeeForm({ employeeId, onClose }: EmployeeFormProps)
                   <SelectItem value="inactive">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Role *</label>
+              <Select
+                value={formData.roleId}
+                onValueChange={(value) => {
+                  const role = roles.find(item => item.id === value)
+                  setFormData({
+                    ...formData,
+                    roleId: value,
+                    roleName: role?.name || '',
+                    roleCode: role?.code || '',
+                    permissions: role?.permissions || [],
+                  })
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map(role => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name} ({role.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Role Details</p>
+                  <p className="text-sm text-slate-500">
+                    {selectedRole?.description || 'Choose a role to preview its access bundle.'}
+                  </p>
+                </div>
+                {selectedRole && (
+                  <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    {selectedRole.code}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(selectedRole?.permissions || []).map(permission => (
+                  <span key={permission} className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 border border-slate-200">
+                    {permission}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 

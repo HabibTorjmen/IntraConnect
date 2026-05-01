@@ -26,7 +26,7 @@ export class DashboardService {
     };
   }
 
-  async getEmployeeStats(employeeId: string) {
+  async getEmployeeStats(employeeId: string, userId: string) {
     const [
       myPendingLeaves,
       myOpenTickets,
@@ -36,7 +36,7 @@ export class DashboardService {
       this.prisma.leaveRequest.count({ where: { employeeId, status: 'pending' } }),
       this.prisma.ticket.count({ where: { employeeId, status: 'open' } }),
       this.prisma.trainingPlan.count({ where: { employeeId, status: 'planned' } }),
-      this.prisma.notification.count({ where: { userId: employeeId, isRead: false } }),
+      this.prisma.notification.count({ where: { userId, isRead: false } }),
     ]);
 
     return {

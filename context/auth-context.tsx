@@ -8,10 +8,13 @@ export interface User {
   id: string
   email: string
   name: string
-  role: 'employee' | 'manager' | 'admin'
+  role: string
   employeeId?: string
   department?: string
   position?: string
+  roleId?: string
+  roleName?: string
+  permissions?: string[]
 }
 
 interface StoredAccount extends User {
@@ -109,6 +112,10 @@ function enrichFromEmployee(email: string) {
       department: employee.department as string,
       position: employee.position as string,
       name: employee.name as string,
+      role: (employee.roleCode as string) || 'employee',
+      roleId: employee.roleId as string,
+      roleName: employee.roleName as string,
+      permissions: (employee.permissions as string[]) || [],
     }
   } catch {
     return {}
@@ -163,15 +170,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       employeeId: hydratedUser.employeeId,
       department: hydratedUser.department,
       position: hydratedUser.position,
+      roleId: hydratedUser.roleId,
+      roleName: hydratedUser.roleName,
+      permissions: hydratedUser.permissions,
     } : null)
     persistAuthState(hydratedUser ? {
       id: hydratedUser.id,
       email: hydratedUser.email,
       name: hydratedUser.name,
-      role: hydratedUser.role,
-      employeeId: hydratedUser.employeeId,
-      department: hydratedUser.department,
-      position: hydratedUser.position,
+          role: hydratedUser.role,
+          employeeId: hydratedUser.employeeId,
+          department: hydratedUser.department,
+          position: hydratedUser.position,
+          roleId: hydratedUser.roleId,
+          roleName: hydratedUser.roleName,
+          permissions: hydratedUser.permissions,
     } : null, hydratedAccounts)
     setIsLoading(false)
   }, [])
@@ -197,6 +210,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         employeeId: hydrated.employeeId,
         department: hydrated.department,
         position: hydrated.position,
+        roleId: hydrated.roleId,
+        roleName: hydrated.roleName,
+        permissions: hydrated.permissions,
       }
 
       setUser(nextUser)
@@ -236,6 +252,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             position: 'New Employee',
             joinDate: new Date().toISOString().split('T')[0],
             status: 'active',
+            roleId: 'role-employee',
+            roleName: 'Employee',
+            roleCode: 'employee',
+            permissions: [
+              'profile.read',
+              'profile.update',
+              'leave.create',
+              'leave.read',
+              'tickets.create',
+              'tickets.read',
+              'documents.read',
+              'feedback.submit',
+              'tools.read',
+            ],
           },
         ]
         window.localStorage.setItem(DEMO_APP_STATE_KEY, JSON.stringify(parsed))
@@ -261,6 +291,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         employeeId: newAccount.employeeId,
         department: newAccount.department,
         position: newAccount.position,
+        roleId: 'role-employee',
+        roleName: 'Employee',
+        permissions: [
+          'profile.read',
+          'profile.update',
+          'leave.create',
+          'leave.read',
+          'tickets.create',
+          'tickets.read',
+          'documents.read',
+          'feedback.submit',
+          'tools.read',
+        ],
       }
 
       setAccounts(nextAccounts)
@@ -288,6 +331,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       employeeId: demoAccount.employeeId,
       department: demoAccount.department,
       position: demoAccount.position,
+      roleId: demoAccount.roleId,
+      roleName: demoAccount.roleName,
+      permissions: demoAccount.permissions,
     }
 
     setError(null)

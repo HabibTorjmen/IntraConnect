@@ -25,6 +25,10 @@ export interface Employee {
   joinDate: string
   status: 'active' | 'inactive'
   managerId?: string
+  roleId?: string
+  roleName?: string
+  roleCode?: string
+  permissions?: string[]
 }
 
 export interface LeaveRequest {
@@ -182,13 +186,14 @@ export interface ToolRecord {
   description: string
   category: string
   url: string
-  visibility: Array<'employee' | 'manager' | 'admin'>
+  visibility: string[]
   active: boolean
 }
 
 export interface RoleRecord {
   id: string
   name: string
+  code: string
   description: string
   permissions: string[]
   memberCount: number
@@ -340,28 +345,124 @@ const defaultRoles: RoleRecord[] = [
   {
     id: 'role-admin',
     name: 'Admin',
+    code: 'admin',
     description: 'Platform governance and unrestricted access',
-    permissions: ['users.manage', 'documents.manage', 'payroll.manage', 'settings.manage'],
+    permissions: [
+      'users.create',
+      'users.manage',
+      'roles.manage',
+      'permissions.manage',
+      'documents.manage',
+      'tickets.manage',
+      'leave.approve',
+      'payroll.manage',
+      'settings.manage',
+      'dashboard.read',
+      'audit.read',
+    ],
     memberCount: 1,
     system: true,
   },
   {
     id: 'role-manager',
     name: 'Manager',
+    code: 'manager',
     description: 'Team approvals, help desk and dashboard oversight',
-    permissions: ['employees.read', 'leave.approve', 'tickets.manage', 'dashboard.read'],
+    permissions: [
+      'employees.read',
+      'users.read',
+      'leave.approve',
+      'leave.read',
+      'tickets.manage',
+      'tickets.assign',
+      'documents.read',
+      'dashboard.read',
+      'reports.read',
+      'training.manage',
+    ],
     memberCount: 2,
     system: true,
   },
   {
     id: 'role-employee',
     name: 'Employee',
+    code: 'employee',
     description: 'Self-service requests and personal document access',
-    permissions: ['leave.create', 'tickets.create', 'documents.read', 'profile.read'],
+    permissions: [
+      'profile.read',
+      'profile.update',
+      'leave.create',
+      'leave.read',
+      'tickets.create',
+      'tickets.read',
+      'documents.read',
+      'feedback.submit',
+      'tools.read',
+    ],
     memberCount: 9,
     system: true,
   },
 ]
+
+function assignDefaultRoleToEmployee(employee: Employee, roles: RoleRecord[]) {
+  if (employee.roleId) return employee
+
+  const normalizedEmail = employee.email.toLowerCase()
+  const adminRole = roles.find(role => role.code === 'admin')
+  const managerRole = roles.find(role => role.code === 'manager')
+  const employeeRole = roles.find(role => role.code === 'employee')
+
+  const inferredRole =
+    normalizedEmail === 'nada.br@intraconnect.com'
+      ? adminRole
+      : normalizedEmail === 'akram.tr@intraconnect.com'
+        ? managerRole
+        : employeeRole
+
+  if (!inferredRole) return employee
+
+  return {
+    ...employee,
+    roleId: inferredRole.id,
+    roleName: inferredRole.name,
+    roleCode: inferredRole.code,
+    permissions: inferredRole.permissions,
+  }
+}
+
+function synchronizeRoles(state: AppState): AppState {
+  const employees = state.employees.map(employee => {
+    const employeeWithFallback = assignDefaultRoleToEmployee(employee, state.roles)
+    const role = state.roles.find(item => item.id === employeeWithFallback.roleId)
+
+    if (!role) {
+      return {
+        ...employeeWithFallback,
+        roleName: employeeWithFallback.roleName || 'Unassigned',
+        permissions: employeeWithFallback.permissions || [],
+      }
+    }
+
+    return {
+      ...employeeWithFallback,
+      roleId: role.id,
+      roleName: role.name,
+      roleCode: role.code,
+      permissions: role.permissions,
+    }
+  })
+
+  const roles = state.roles.map(role => ({
+    ...role,
+    memberCount: employees.filter(employee => employee.roleId === role.id).length,
+  }))
+
+  return {
+    ...state,
+    employees,
+    roles,
+  }
+}
 
 function createDefaultOnboardingPlans(employees: Employee[]): OnboardingPlan[] {
   return employees.slice(0, 5).map((employee, index) => ({
@@ -382,6 +483,7 @@ function createDefaultOnboardingPlans(employees: Employee[]): OnboardingPlan[] {
 
 function buildDefaultState(): AppState {
   const employees = [...MOCK_EMPLOYEES]
+  const roles = [...defaultRoles]
   const payrolls = MOCK_PAYROLL.map((item, index) => {
     const periodStart = item.periodStart || '2026-03-01'
     const periodEnd = item.periodEnd || '2026-03-31'
@@ -406,7 +508,7 @@ function buildDefaultState(): AppState {
     }
   })
 
-  return {
+  return synchronizeRoles({
     employees,
     leaveRequests: [...MOCK_LEAVES],
     tickets: [...MOCK_TICKETS],
@@ -420,14 +522,14 @@ function buildDefaultState(): AppState {
     auditLogs: [...MOCK_AUDIT_LOGS],
     notifications: defaultNotifications,
     tools: defaultTools,
-    roles: defaultRoles,
+    roles,
     onboardingPlans: createDefaultOnboardingPlans(employees),
     settings: {
       companyName: 'IntraConnect',
       supportEmail: 'support@intraconnect.local',
       timezone: 'Africa/Tunis',
     },
-  }
+  })
 }
 
 function readAppState(): AppState {
@@ -438,8 +540,10 @@ function readAppState(): AppState {
 
   try {
     return {
-      ...buildDefaultState(),
-      ...JSON.parse(stored),
+      ...synchronizeRoles({
+        ...buildDefaultState(),
+        ...JSON.parse(stored),
+      }),
     }
   } catch {
     return buildDefaultState()
@@ -586,11 +690,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         joinDate: employee.joinDate || new Date().toISOString().split('T')[0],
         status: employee.status || 'active',
         managerId: employee.managerId,
+        roleId: employee.roleId,
+        roleName: employee.roleName,
+        roleCode: employee.roleCode,
+        permissions: employee.permissions || [],
       }
 
       next.employees = [newEmployee, ...next.employees]
+      const synchronized = synchronizeRoles(next)
       appendAudit(next, 'CREATE_EMPLOYEE', 'EMPLOYEES', `Created employee ${newEmployee.name}`)
-      return next
+      return synchronized
     })
   }, [appendAudit, commit])
 
@@ -607,11 +716,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         joinDate: employee.joinDate || new Date().toISOString().split('T')[0],
         status: employee.status || 'active',
         managerId: employee.managerId,
+        roleId: employee.roleId || defaultRoles.find(role => role.code === 'employee')?.id,
+        roleName: employee.roleName || 'Employee',
+        roleCode: employee.roleCode || 'employee',
+        permissions: employee.permissions || [],
       }))
 
       next.employees = [...created, ...next.employees]
+      const synchronized = synchronizeRoles(next)
       appendAudit(next, 'BULK_IMPORT_EMPLOYEE', 'EMPLOYEES', `Imported ${created.length} employees`)
-      return next
+      return synchronized
     })
   }, [appendAudit, commit])
 
@@ -619,8 +733,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     commit(previous => {
       const next = structuredClone(previous)
       next.employees = next.employees.map(item => item.id === id ? { ...item, ...employee } : item)
+      const synchronized = synchronizeRoles(next)
       appendAudit(next, 'UPDATE_EMPLOYEE', 'EMPLOYEES', `Updated employee ${id}`)
-      return next
+      return synchronized
     })
   }, [appendAudit, commit])
 
@@ -628,8 +743,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     commit(previous => {
       const next = structuredClone(previous)
       next.employees = next.employees.filter(item => item.id !== id)
+      const synchronized = synchronizeRoles(next)
       appendAudit(next, 'DELETE_EMPLOYEE', 'EMPLOYEES', `Removed employee ${id}`)
-      return next
+      return synchronized
     })
   }, [appendAudit, commit])
 
@@ -1055,6 +1171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         {
           id: createId('role'),
           name: role.name || 'Custom Role',
+          code: role.code || `role_${createId('code')}`,
           description: role.description || 'User-defined permission set',
           permissions: role.permissions || [],
           memberCount: role.memberCount || 0,
@@ -1062,8 +1179,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         ...next.roles,
       ]
+      const synchronized = synchronizeRoles(next)
       appendAudit(next, 'CREATE_ROLE', 'RBAC', `Created role ${role.name || 'Custom Role'}`)
-      return next
+      return synchronized
     })
   }, [appendAudit, commit])
 
@@ -1071,8 +1189,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     commit(previous => {
       const next = structuredClone(previous)
       next.roles = next.roles.map(item => item.id === id ? { ...item, ...role } : item)
+      const synchronized = synchronizeRoles(next)
       appendAudit(next, 'UPDATE_ROLE', 'RBAC', `Updated role ${id}`)
-      return next
+      return synchronized
     })
   }, [appendAudit, commit])
 

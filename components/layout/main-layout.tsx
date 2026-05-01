@@ -24,6 +24,7 @@ import OnboardingList from '@/components/modules/onboarding-list'
 import StaffDirectory from '@/components/modules/staff-directory'
 import Tools from '@/components/modules/tools'
 import AdminSettings from '@/components/modules/admin-settings'
+import RoleManagement from '@/components/modules/role-management'
 
 export default function MainLayout() {
   const { user, logout } = useContext(AuthContext)
@@ -84,6 +85,8 @@ export default function MainLayout() {
         return <FeedbackModule />
       case 'admin-settings':
         return <AdminSettings />
+      case 'role-management':
+        return <RoleManagement />
       case 'profile':
         return <ProfilePage />
       default:

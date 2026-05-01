@@ -6,6 +6,7 @@ import { Bell, Briefcase, Database, Mail, Settings, Shield, Users } from 'lucide
 import { AppContext } from '@/context/app-context'
 import { Button } from '@/components/ui/button'
 import AuditLogsModule from '@/components/modules/audit-logs'
+import RoleManagement from '@/components/modules/role-management'
 
 const settingsCategories = [
   { id: 'general', name: 'General Settings', icon: Settings },
@@ -20,9 +21,6 @@ const settingsCategories = [
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState<(typeof settingsCategories)[number]['id']>('general')
   const {
-    roles,
-    addRole,
-    updateRole,
     tools,
     addTool,
     updateTool,
@@ -102,48 +100,7 @@ export default function AdminSettings() {
           )}
 
           {activeTab === 'roles' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">Roles & Permissions</h3>
-                  <p className="text-sm text-slate-500 mt-1">Frontend-only RBAC catalog aligned with the sprint scope.</p>
-                </div>
-                <Button
-                  onClick={() => addRole({
-                    name: 'Custom Role',
-                    description: 'Editable business role',
-                    permissions: ['tickets.read', 'documents.read'],
-                  })}
-                >
-                  Add Role
-                </Button>
-              </div>
-
-              {roles.map(role => (
-                <div key={role.id} className="border border-slate-200 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h4 className="font-bold text-slate-800">{role.name}</h4>
-                      <p className="text-sm text-slate-500">{role.description}</p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => updateRole(role.id, { memberCount: role.memberCount + 1 })}
-                    >
-                      Simulate Member
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {role.permissions.map(permission => (
-                      <span key={permission} className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 text-xs">
-                        {permission}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-400">{role.memberCount} mapped users</p>
-                </div>
-              ))}
-            </div>
+            <RoleManagement embedded />
           )}
 
           {activeTab === 'tools' && (

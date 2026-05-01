@@ -24,6 +24,7 @@ export default function Sidebar({ activeModule, setActiveModule, userRole }: Sid
     { id: 'training', label: 'Training', icon: BookOpen, roles: ['employee', 'manager', 'admin'] },
     { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ['employee', 'manager', 'admin'] },
     { id: 'profile', label: 'My Profile', icon: FileText, roles: ['employee', 'manager', 'admin'] },
+    { id: 'role-management', label: 'Role Management', icon: Shield, roles: ['admin'] },
   ]
 
   const visibleItems = menuItems.filter(item => item.roles.includes(userRole))

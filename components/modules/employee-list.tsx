@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Edit, Trash2, Search, FileUp, Filter, Users, ShieldAlert, History } from 'lucide-react'
+import { Edit, Trash2, Search, FileUp, Filter, Users, History } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AuthContext } from '@/context/auth-context'
 import AuditLogList from './audit-log-list'
@@ -36,8 +36,8 @@ export default function EmployeeList({ onEditEmployee }: EmployeeListProps) {
     // In a real app, this would open a file picker and parse CSV.
     // For this PFE demo, we'll simulate importing a few employees.
     const dummyEmployees = [
-      { fullName: 'Jean Dupont', department: 'IT', status: 'ACTIVE', phone: '0612345678', joinDate: new Date().toISOString() },
-      { fullName: 'Marie Curie', department: 'HR', status: 'ACTIVE', phone: '0687654321', joinDate: new Date().toISOString() }
+      { fullName: 'Jean Dupont', department: 'IT', status: 'active' as const, phone: '0612345678', joinDate: new Date().toISOString() },
+      { fullName: 'Marie Curie', department: 'HR', status: 'active' as const, phone: '0687654321', joinDate: new Date().toISOString() }
     ]
     
     if (confirm(`Simulate bulk import of ${dummyEmployees.length} employees?`)) {
@@ -130,6 +130,7 @@ export default function EmployeeList({ onEditEmployee }: EmployeeListProps) {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Department</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Position</TableHead>
                 <TableHead>Join Date</TableHead>
                 <TableHead>Status</TableHead>
@@ -142,6 +143,12 @@ export default function EmployeeList({ onEditEmployee }: EmployeeListProps) {
                   <TableCell className="font-medium text-slate-900">{emp.name}</TableCell>
                   <TableCell className="text-slate-600">{emp.email}</TableCell>
                   <TableCell>{emp.department}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-800">{emp.roleName || 'Unassigned'}</span>
+                      <span className="text-xs text-slate-500">{emp.roleCode || 'no-role'}</span>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-slate-600">{emp.position}</TableCell>
                   <TableCell className="text-slate-600">{emp.joinDate ? new Date(emp.joinDate).toLocaleDateString() : 'N/A'}</TableCell>
                   <TableCell>

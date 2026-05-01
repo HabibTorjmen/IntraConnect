@@ -40,7 +40,11 @@ export class AuthService {
       name: userData.username,
       email: userData.email,
       password: null,
-      // role: userData.role,
+      roles: userData.roles?.map((role) => role.code) ?? [],
+      permissions: userData.roles?.flatMap((role) =>
+        role.permissions.map((permission) => `${permission.module}.${permission.action}`),
+      ) ?? [],
+      employeeId: userData.employee?.id,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -55,11 +59,21 @@ export class AuthService {
  public async register(user: RegisterUserDTO): Promise<User> {
     
     const hashedPassword = await AuthHelpers.hash(user.password);
+    const employeeRole = await this.prisma.role.findUnique({
+      where: { code: 'employee' },
+    });
 
     return this.userService.createUser({
       username: user.name, // map name → username
       email: user.email,
       passwordHash: hashedPassword,
+      roles: employeeRole
+        ? {
+            connect: {
+              id: employeeRole.id,
+            },
+          }
+        : undefined,
     });
   }
 }

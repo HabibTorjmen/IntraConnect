@@ -1,6 +1,6 @@
 // prisma/seeds/users.seeds.ts
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import { AuthHelpers } from '../../src/shared/helpers/auth.helpers';
 
 const prisma = new PrismaClient();
 
@@ -11,18 +11,31 @@ export async function seed() {
   console.log('🔐 Creating permissions...');
   const permissionsData = [
     { action: 'manage', module: 'all' }, // Admin
+    { action: 'create', module: 'users' },
+    { action: 'read', module: 'users' },
+    { action: 'manage', module: 'users' },
+    { action: 'manage', module: 'roles' },
+    { action: 'manage', module: 'permissions' },
     { action: 'read', module: 'employees' },
-    { action: 'create', module: 'tickets' },
-    { action: 'update', module: 'tickets' },
+    { action: 'create', module: 'leave' },
+    { action: 'read', module: 'leave' },
     { action: 'approve', module: 'leave' },
-    { action: 'view', module: 'payroll' },
-    { action: 'create', module: 'Survey' },
-    { action: 'read', module: 'Survey' },
-    { action: 'create', module: 'PerformanceFeedback' },
-    { action: 'read', module: 'PerformanceFeedback' },
-    { action: 'create', module: 'TrainingPlan' },
-    { action: 'read', module: 'TrainingPlan' },
-    { action: 'read', module: 'AuditLog' },
+    { action: 'create', module: 'tickets' },
+    { action: 'read', module: 'tickets' },
+    { action: 'assign', module: 'tickets' },
+    { action: 'manage', module: 'tickets' },
+    { action: 'read', module: 'documents' },
+    { action: 'manage', module: 'documents' },
+    { action: 'manage', module: 'payroll' },
+    { action: 'read', module: 'reports' },
+    { action: 'read', module: 'dashboard' },
+    { action: 'read', module: 'audit' },
+    { action: 'manage', module: 'settings' },
+    { action: 'manage', module: 'training' },
+    { action: 'read', module: 'profile' },
+    { action: 'update', module: 'profile' },
+    { action: 'submit', module: 'feedback' },
+    { action: 'read', module: 'tools' },
   ];
 
   const permissions = [];
@@ -35,15 +48,47 @@ export async function seed() {
     permissions.push(perm);
   }
 
+  const selectPermissions = (names: string[]) =>
+    permissions.filter((permission) =>
+      names.includes(`${permission.module}.${permission.action}`),
+    );
+
+  const managerPermissions = selectPermissions([
+    'employees.read',
+    'users.read',
+    'leave.approve',
+    'leave.read',
+    'tickets.manage',
+    'tickets.assign',
+    'documents.read',
+    'dashboard.read',
+    'reports.read',
+    'training.manage',
+  ]);
+
+  const employeePermissions = selectPermissions([
+    'profile.read',
+    'profile.update',
+    'leave.create',
+    'leave.read',
+    'tickets.create',
+    'tickets.read',
+    'documents.read',
+    'feedback.submit',
+    'tools.read',
+  ]);
+
   // 2️⃣ Roles
   console.log('📝 Creating roles...');
   const adminRole = await prisma.role.upsert({
     where: { name: 'admin' },
     update: {
-      permissions: { connect: permissions.map(p => ({ id: p.id })) }
+      code: 'admin',
+      permissions: { set: permissions.map(p => ({ id: p.id })) }
     },
     create: { 
       name: 'admin',
+      code: 'admin',
       permissions: { connect: permissions.map(p => ({ id: p.id })) }
     },
   });
@@ -51,14 +96,16 @@ export async function seed() {
   const managerRole = await prisma.role.upsert({
     where: { name: 'manager' },
     update: {
+      code: 'manager',
       permissions: { 
-        connect: permissions.filter(p => ['read', 'create', 'update', 'approve'].includes(p.action)).map(p => ({ id: p.id })) 
+        set: managerPermissions.map(p => ({ id: p.id })) 
       }
     },
     create: { 
       name: 'manager',
+      code: 'manager',
       permissions: { 
-        connect: permissions.filter(p => ['read', 'create', 'update', 'approve'].includes(p.action)).map(p => ({ id: p.id })) 
+        connect: managerPermissions.map(p => ({ id: p.id })) 
       }
     },
   });
@@ -66,14 +113,16 @@ export async function seed() {
   const employeeRole = await prisma.role.upsert({
     where: { name: 'employee' },
     update: {
+      code: 'employee',
       permissions: { 
-        connect: permissions.filter(p => ['create', 'update', 'view'].includes(p.action)).map(p => ({ id: p.id })) 
+        set: employeePermissions.map(p => ({ id: p.id })) 
       }
     },
     create: { 
       name: 'employee',
+      code: 'employee',
       permissions: { 
-        connect: permissions.filter(p => ['create', 'update', 'view'].includes(p.action)).map(p => ({ id: p.id })) 
+        connect: employeePermissions.map(p => ({ id: p.id })) 
       }
     },
   });
@@ -146,10 +195,14 @@ export async function seed() {
 
   // 6️⃣ Admin User
   console.log('👤 Creating admin user...');
-  const hashedPassword = await bcrypt.hash('Admin123!', 10);
+  const hashedPassword = await AuthHelpers.hash('Admin123!');
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@virtide.com' },
-    update: {},
+    update: {
+      username: 'admin',
+      passwordHash: hashedPassword,
+      roles: { set: [{ id: adminRole.id }] },
+    },
     create: {
       username: 'admin',
       email: 'admin@virtide.com',
@@ -171,11 +224,15 @@ export async function seed() {
   console.log('👤 Creating manager user...');
   const managerUser = await prisma.user.upsert({
     where: { email: 'manager@virtide.com' },
-    update: {},
+    update: {
+      username: 'manager',
+      passwordHash: await AuthHelpers.hash('Manager123!'),
+      roles: { set: [{ id: managerRole.id }] },
+    },
     create: {
       username: 'manager',
       email: 'manager@virtide.com',
-      passwordHash: await bcrypt.hash('Manager123!', 10),
+      passwordHash: await AuthHelpers.hash('Manager123!'),
       roles: { connect: [{ id: managerRole.id }] },
       employee: {
         create: {
@@ -193,11 +250,15 @@ export async function seed() {
   console.log('👤 Creating sample employee user...');
   const sampleUser = await prisma.user.upsert({
     where: { email: 'employee@virtide.com' },
-    update: {},
+    update: {
+      username: 'employee',
+      passwordHash: await AuthHelpers.hash('Employee123!'),
+      roles: { set: [{ id: employeeRole.id }] },
+    },
     create: {
       username: 'employee',
       email: 'employee@virtide.com',
-      passwordHash: await bcrypt.hash('Employee123!', 10),
+      passwordHash: await AuthHelpers.hash('Employee123!'),
       roles: { connect: [{ id: employeeRole.id }] },
       employee: {
         create: {
@@ -233,4 +294,4 @@ export async function seed() {
 
   console.log('🎉 Seeding successfully completed!');
 }
-
+
