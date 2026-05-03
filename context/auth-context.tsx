@@ -162,22 +162,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : null
 
     setAccounts(hydratedAccounts)
-    setUser(hydratedUser ? {
-      id: hydratedUser.id,
-      email: hydratedUser.email,
-      name: hydratedUser.name,
-      role: hydratedUser.role,
-      employeeId: hydratedUser.employeeId,
-      department: hydratedUser.department,
-      position: hydratedUser.position,
-      roleId: hydratedUser.roleId,
-      roleName: hydratedUser.roleName,
-      permissions: hydratedUser.permissions,
-    } : null)
-    persistAuthState(hydratedUser ? {
-      id: hydratedUser.id,
-      email: hydratedUser.email,
-      name: hydratedUser.name,
+
+    // Auto-login as demo admin if no session exists (demo mode – no backend required)
+    const resolvedUser: User | null = hydratedUser
+      ? {
+          id: hydratedUser.id,
+          email: hydratedUser.email,
+          name: hydratedUser.name,
           role: hydratedUser.role,
           employeeId: hydratedUser.employeeId,
           department: hydratedUser.department,
@@ -185,7 +176,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           roleId: hydratedUser.roleId,
           roleName: hydratedUser.roleName,
           permissions: hydratedUser.permissions,
-    } : null, hydratedAccounts)
+        }
+      : (() => {
+          const demoAccount = ensureEmployeeForAccount(defaultAccounts[0])
+          return {
+            id: demoAccount.id,
+            email: demoAccount.email,
+            name: demoAccount.name,
+            role: demoAccount.role,
+            employeeId: demoAccount.employeeId,
+            department: demoAccount.department,
+            position: demoAccount.position,
+            roleId: demoAccount.roleId,
+            roleName: demoAccount.roleName,
+            permissions: demoAccount.permissions,
+          }
+        })()
+
+    setUser(resolvedUser)
+    persistAuthState(resolvedUser, hydratedAccounts)
     setIsLoading(false)
   }, [])
 
