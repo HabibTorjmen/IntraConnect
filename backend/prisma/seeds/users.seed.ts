@@ -17,25 +17,39 @@ export async function seed() {
     { action: 'manage', module: 'roles' },
     { action: 'manage', module: 'permissions' },
     { action: 'read', module: 'employees' },
+    { action: 'create', module: 'employees' },
+    { action: 'update', module: 'employees' },
+    { action: 'manage', module: 'employees' },
     { action: 'create', module: 'leave' },
     { action: 'read', module: 'leave' },
     { action: 'approve', module: 'leave' },
     { action: 'create', module: 'tickets' },
     { action: 'read', module: 'tickets' },
+    { action: 'update', module: 'tickets' },
     { action: 'assign', module: 'tickets' },
     { action: 'manage', module: 'tickets' },
     { action: 'read', module: 'documents' },
     { action: 'manage', module: 'documents' },
+    { action: 'view', module: 'payroll' },
     { action: 'manage', module: 'payroll' },
     { action: 'read', module: 'reports' },
     { action: 'read', module: 'dashboard' },
     { action: 'read', module: 'audit' },
+    { action: 'read', module: 'notifications' },
+    { action: 'update', module: 'notifications' },
     { action: 'manage', module: 'settings' },
     { action: 'manage', module: 'training' },
     { action: 'read', module: 'profile' },
     { action: 'update', module: 'profile' },
     { action: 'submit', module: 'feedback' },
     { action: 'read', module: 'tools' },
+    { action: 'manage', module: 'tools' },
+    { action: 'read', module: 'facility' },
+    { action: 'create', module: 'facility' },
+    { action: 'manage', module: 'facility' },
+    { action: 'read', module: 'attendance' },
+    { action: 'create', module: 'attendance' },
+    { action: 'manage', module: 'attendance' },
   ];
 
   const permissions = [];
@@ -59,11 +73,20 @@ export async function seed() {
     'leave.approve',
     'leave.read',
     'tickets.manage',
+    'tickets.update',
     'tickets.assign',
+    'tickets.read',
     'documents.read',
     'dashboard.read',
     'reports.read',
     'training.manage',
+    'notifications.read',
+    'notifications.update',
+    'payroll.view',
+    'facility.read',
+    'facility.manage',
+    'attendance.read',
+    'attendance.manage',
   ]);
 
   const employeePermissions = selectPermissions([
@@ -73,9 +96,18 @@ export async function seed() {
     'leave.read',
     'tickets.create',
     'tickets.read',
+    'tickets.update',
     'documents.read',
     'feedback.submit',
     'tools.read',
+    'notifications.read',
+    'notifications.update',
+    'dashboard.read',
+    'payroll.view',
+    'facility.read',
+    'facility.create',
+    'attendance.read',
+    'attendance.create',
   ]);
 
   // 2️⃣ Roles
@@ -148,23 +180,54 @@ export async function seed() {
     deptMap[dept.name] = d.id;
   }
 
-  // 4️⃣ Tools
+  // 4️⃣ Tools — charge.docx §4.11 requires platform supports minimum 30 tool entries
   console.log('🛠️ Creating tools...');
   const toolsData = [
-    { name: 'Microsoft Teams', category: 'Communication' },
-    { name: 'Jira', category: 'Project Management' },
-    { name: 'Confluence', category: 'Documentation' },
-    { name: 'GitLab', category: 'Development' },
+    { name: 'Microsoft Teams',        category: 'Communication',       url: 'https://teams.microsoft.com' },
+    { name: 'Slack',                  category: 'Communication',       url: 'https://slack.com' },
+    { name: 'Zoom',                   category: 'Communication',       url: 'https://zoom.us' },
+    { name: 'Google Meet',            category: 'Communication',       url: 'https://meet.google.com' },
+    { name: 'Outlook Web',            category: 'Communication',       url: 'https://outlook.office.com' },
+    { name: 'Jira',                   category: 'Project Management',  url: 'https://www.atlassian.com/software/jira' },
+    { name: 'Asana',                  category: 'Project Management',  url: 'https://asana.com' },
+    { name: 'Trello',                 category: 'Project Management',  url: 'https://trello.com' },
+    { name: 'Monday.com',             category: 'Project Management',  url: 'https://monday.com' },
+    { name: 'Confluence',             category: 'Documentation',       url: 'https://www.atlassian.com/software/confluence' },
+    { name: 'Notion',                 category: 'Documentation',       url: 'https://www.notion.so' },
+    { name: 'SharePoint',             category: 'Documentation',       url: 'https://www.office.com/launch/sharepoint' },
+    { name: 'GitLab',                 category: 'Development',         url: 'https://gitlab.com' },
+    { name: 'GitHub',                 category: 'Development',         url: 'https://github.com' },
+    { name: 'Bitbucket',              category: 'Development',         url: 'https://bitbucket.org' },
+    { name: 'Jenkins',                category: 'Development',         url: 'https://www.jenkins.io' },
+    { name: 'Sentry',                 category: 'Monitoring',          url: 'https://sentry.io' },
+    { name: 'Grafana',                category: 'Monitoring',          url: 'https://grafana.com' },
+    { name: 'Datadog',                category: 'Monitoring',          url: 'https://www.datadoghq.com' },
+    { name: 'Figma',                  category: 'Design',              url: 'https://www.figma.com' },
+    { name: 'Adobe Creative Cloud',   category: 'Design',              url: 'https://www.adobe.com/creativecloud.html' },
+    { name: 'Salesforce',             category: 'CRM',                 url: 'https://www.salesforce.com' },
+    { name: 'HubSpot',                category: 'CRM',                 url: 'https://www.hubspot.com' },
+    { name: 'SAP',                    category: 'ERP',                 url: 'https://www.sap.com' },
+    { name: 'Workday',                category: 'HR',                  url: 'https://www.workday.com' },
+    { name: 'BambooHR',               category: 'HR',                  url: 'https://www.bamboohr.com' },
+    { name: 'DocuSign',               category: 'Legal',               url: 'https://www.docusign.com' },
+    { name: 'OneDrive',               category: 'Storage',             url: 'https://onedrive.live.com' },
+    { name: 'Google Drive',           category: 'Storage',             url: 'https://drive.google.com' },
+    { name: 'Dropbox',                category: 'Storage',             url: 'https://www.dropbox.com' },
+    { name: 'IT Ticketing Portal',    category: 'IT',                  url: 'https://intra.virtide.com/it' },
+    { name: 'VPN Client',             category: 'IT',                  url: 'https://vpn.virtide.com' },
   ];
 
-  for (const tool of toolsData) {
-    let existing = await prisma.tool.findFirst({ where: { name: tool.name } });
+  for (let i = 0; i < toolsData.length; i++) {
+    const tool = toolsData[i];
+    const existing = await prisma.tool.findFirst({ where: { name: tool.name } });
     if (!existing) {
-      existing = await prisma.tool.create({
+      await prisma.tool.create({
         data: {
           name: tool.name,
           category: tool.category,
-          roles: { connect: [{ id: adminRole.id }] },
+          url: tool.url,
+          priority: i,
+          isActive: true,
         },
       });
     }

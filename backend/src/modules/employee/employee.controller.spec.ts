@@ -34,11 +34,11 @@ describe('EmployeeController', () => {
 
   it('passes the authenticated user scope to findAll', async () => {
     const user = { id: 'user-1' };
-    employeeService.findAll.mockResolvedValueOnce([]);
+    employeeService.findAll.mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 25 });
 
-    await controller.findAll(user);
+    await controller.findAll(user, {});
 
-    expect(employeeService.findAll).toHaveBeenCalledWith(user);
+    expect(employeeService.findAll).toHaveBeenCalledWith(user, expect.any(Object));
   });
 
   it('passes filters and user scope to search', async () => {

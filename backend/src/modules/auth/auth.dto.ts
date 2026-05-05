@@ -35,3 +35,28 @@ export class LoginUserDTO {
   @ApiProperty()
   password: string;
 }
+
+export class FirstLoginDTO {
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty()
+  @IsEmail({}, { message: INVALID_EMAIL })
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty()
+  otp: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty()
+  newPassword: string;
+}
+
+export class RegenerateOtpDTO {
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty()
+  userId: string;
+}

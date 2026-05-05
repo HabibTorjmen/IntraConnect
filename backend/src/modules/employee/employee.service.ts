@@ -3,14 +3,32 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { OtpService, OTP_PURPOSE } from '../auth/otp.service';
 import { CreateEmployeeDTO } from './dto/create-employee.dto';
 import { UpdateEmployeeDTO } from './dto/update-employee.dto';
+import { BulkUpdateDTO } from './dto/bulk-update.dto';
 import { getEmployeeIdFromUser, isDirector } from '../auth/auth-access.helper';
+
+export interface EmployeeListParams {
+  query?: string;
+  departmentId?: string;
+  roleId?: string;
+  status?: string;
+  contractType?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+}
 
 @Injectable()
 export class EmployeeService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private otpService: OtpService,
+  ) {}
 
   private ensureDirectorAccess(user: any) {
     if (!isDirector(user)) {
@@ -45,18 +63,36 @@ export class EmployeeService {
     department: true,
   };
 
+  private buildScalarData(data: CreateEmployeeDTO | UpdateEmployeeDTO) {
+    return {
+      fullName: (data as any).fullName,
+      personalEmail: data.personalEmail,
+      phone: data.phone,
+      address: data.address,
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+      status: data.status,
+      contractType: data.contractType,
+      workLocation: data.workLocation,
+      salaryGrade: data.salaryGrade,
+      probationEndDate: data.probationEndDate ? new Date(data.probationEndDate) : undefined,
+      hrNotes: data.hrNotes,
+      emergencyName: data.emergencyName,
+      emergencyPhone: data.emergencyPhone,
+      emergencyRelation: data.emergencyRelation,
+      joinDate: data.joinDate ? new Date(data.joinDate) : undefined,
+    };
+  }
+
   async create(data: CreateEmployeeDTO, user: any) {
     this.ensureDirectorAccess(user);
 
     const employee = await this.prisma.employee.create({
       data: {
+        ...(this.buildScalarData(data) as any),
         fullName: data.fullName,
-        phone: data.phone,
         department: data.department
           ? { connect: { id: data.department } }
           : undefined,
-        status: data.status,
-        joinDate: data.joinDate ? new Date(data.joinDate) : undefined,
         user: data.userId
           ? { connect: { id: data.userId } }
           : undefined,
@@ -86,17 +122,52 @@ export class EmployeeService {
     return employee;
   }
 
-  async findAll(user: any) {
-    if (isDirector(user)) {
-      return this.prisma.employee.findMany({
-        include: this.employeeInclude,
-      });
-    }
+  async findAll(user: any, params: EmployeeListParams = {}) {
+    const scope = isDirector(user)
+      ? undefined
+      : { id: this.getScopedEmployeeId(user) };
 
-    return this.prisma.employee.findMany({
-      where: { id: this.getScopedEmployeeId(user) },
-      include: this.employeeInclude,
-    });
+    const where: Prisma.EmployeeWhereInput = {
+      AND: [
+        params.query
+          ? {
+              OR: [
+                { fullName: { contains: params.query, mode: 'insensitive' } },
+                { personalEmail: { contains: params.query, mode: 'insensitive' } },
+                { phone: { contains: params.query, mode: 'insensitive' } },
+                { id: { contains: params.query, mode: 'insensitive' } },
+                { user: { email: { contains: params.query, mode: 'insensitive' } } },
+                { user: { username: { contains: params.query, mode: 'insensitive' } } },
+              ],
+            }
+          : {},
+        params.departmentId ? { departmentId: params.departmentId } : {},
+        params.status ? { status: params.status } : {},
+        params.contractType ? { contractType: params.contractType } : {},
+        params.roleId
+          ? { user: { roles: { some: { id: params.roleId } } } }
+          : {},
+        scope ?? {},
+      ],
+    };
+
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 25));
+    const sortBy = params.sortBy ?? 'fullName';
+    const sortDir = params.sortDir ?? 'asc';
+
+    const [items, total] = await Promise.all([
+      this.prisma.employee.findMany({
+        where,
+        include: this.employeeInclude,
+        orderBy: { [sortBy]: sortDir } as any,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.employee.count({ where }),
+    ]);
+
+    return { items, total, page, pageSize };
   }
 
   async findOne(id: string, user: any) {
@@ -122,13 +193,10 @@ export class EmployeeService {
     return this.prisma.employee.update({
       where: { id },
       data: {
-        fullName: data.fullName,
-        phone: data.phone,
+        ...this.buildScalarData(data),
         department: data.department
           ? { connect: { id: data.department } }
           : undefined,
-        status: data.status,
-        joinDate: data.joinDate ? new Date(data.joinDate) : undefined,
         manager: data.managerId
           ? { connect: { id: data.managerId } }
           : undefined,
@@ -149,6 +217,71 @@ export class EmployeeService {
     });
   }
 
+  /** charge.docx §4.1: soft-delete (status=inactive, login revoked, data retained). */
+  async deactivate(id: string, user: any) {
+    this.ensureDirectorAccess(user);
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.update({
+        where: { id },
+        data: { status: 'inactive' },
+      });
+      if (employee.userId) {
+        await tx.user.update({
+          where: { id: employee.userId },
+          data: { isActive: false },
+        });
+      }
+    });
+
+    return this.findOne(id, user);
+  }
+
+  /** charge.docx §4.1: reactivate (access restored, optional OTP regen). */
+  async reactivate(id: string, user: any, regenerateOtp = false) {
+    this.ensureDirectorAccess(user);
+
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.update({
+        where: { id },
+        data: { status: 'active' },
+      });
+      if (employee.userId) {
+        await tx.user.update({
+          where: { id: employee.userId },
+          data: { isActive: true, failedLoginAttempts: 0, lockedUntil: null },
+        });
+      }
+    });
+
+    let otpInfo: { otp: string; expiresAt: Date } | undefined;
+    if (regenerateOtp && employee.userId) {
+      await this.prisma.user.update({
+        where: { id: employee.userId },
+        data: { mustChangePassword: true },
+      });
+      otpInfo = await this.otpService.issue(employee.userId, OTP_PURPOSE.FIRST_LOGIN);
+    }
+
+    return { employee: await this.findOne(id, user), otp: otpInfo };
+  }
+
+  /**
+   * charge.docx §4.1: deactivation is soft. Hard delete kept admin-only and only
+   * usable for orphan records that never had login access.
+   */
   async remove(id: string, user: any) {
     this.ensureDirectorAccess(user);
 
@@ -162,44 +295,148 @@ export class EmployeeService {
     this.ensureDirectorAccess(user);
 
     const results = [];
-    for (const emp of employees) {
+    for (let row = 0; row < employees.length; row++) {
+      const emp = employees[row];
       try {
         const result = await this.create(emp, user);
-        results.push({ success: true, data: result });
-      } catch (err) {
-        results.push({ success: false, error: err.message, data: emp });
+        results.push({ row, success: true, id: result?.id });
+      } catch (err: any) {
+        results.push({
+          row,
+          success: false,
+          error: err?.message ?? 'Unknown error',
+          input: emp,
+        });
       }
     }
-    return results;
+    return {
+      total: employees.length,
+      succeeded: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
   }
 
+  async bulkUpdate(dto: BulkUpdateDTO, user: any) {
+    this.ensureDirectorAccess(user);
+
+    const updates: Prisma.EmployeeUpdateManyArgs['data'] = {};
+    if (dto.status) updates.status = dto.status;
+    if (dto.departmentId) updates.departmentId = dto.departmentId;
+    if (dto.contractType) updates.contractType = dto.contractType;
+
+    let employeesUpdated = 0;
+    if (Object.keys(updates).length > 0) {
+      const r = await this.prisma.employee.updateMany({
+        where: { id: { in: dto.ids } },
+        data: updates,
+      });
+      employeesUpdated = r.count;
+    }
+
+    let usersUpdated = 0;
+    if (dto.roleId) {
+      const linked = await this.prisma.employee.findMany({
+        where: { id: { in: dto.ids }, userId: { not: null } },
+        select: { userId: true },
+      });
+      for (const e of linked) {
+        if (!e.userId) continue;
+        await this.prisma.user.update({
+          where: { id: e.userId },
+          data: { roles: { set: [{ id: dto.roleId }] } },
+        });
+        usersUpdated += 1;
+      }
+    }
+
+    return { employeesUpdated, usersUpdated };
+  }
+
+  async bulkSetStatus(ids: string[], status: 'active' | 'inactive', user: any) {
+    this.ensureDirectorAccess(user);
+
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, userId: true },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.employee.updateMany({
+        where: { id: { in: ids } },
+        data: { status },
+      }),
+      ...employees
+        .filter((e) => e.userId)
+        .map((e) =>
+          this.prisma.user.update({
+            where: { id: e.userId! },
+            data: {
+              isActive: status === 'active',
+              ...(status === 'active'
+                ? { failedLoginAttempts: 0, lockedUntil: null }
+                : {}),
+            },
+          }),
+        ),
+    ]);
+
+    return { count: employees.length };
+  }
+
+  /** charge.docx §4.1: bulk export Excel/CSV. CSV implemented; Excel uses same rows client-side. */
+  async exportCsv(user: any, params: EmployeeListParams = {}): Promise<string> {
+    const all = await this.findAll(user, { ...params, page: 1, pageSize: 10000 });
+    const header = [
+      'id',
+      'fullName',
+      'personalEmail',
+      'phone',
+      'department',
+      'jobTitle',
+      'status',
+      'contractType',
+      'workLocation',
+      'joinDate',
+    ];
+    const escape = (v: any) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = all.items.map((e: any) =>
+      [
+        e.id,
+        e.fullName,
+        e.personalEmail ?? '',
+        e.phone ?? '',
+        e.department?.name ?? '',
+        e.jobTitle?.title ?? '',
+        e.status,
+        e.contractType ?? '',
+        e.workLocation ?? '',
+        e.joinDate ? new Date(e.joinDate).toISOString().slice(0, 10) : '',
+      ]
+        .map(escape)
+        .join(','),
+    );
+    return [header.join(','), ...rows].join('\n');
+  }
+
+  // Keep search() as a thin wrapper for back-compat with /search/advanced
   async search(
     user: any,
     query?: string,
     departmentId?: string,
     status?: string,
   ) {
-    const scopedEmployeeId = isDirector(user)
-      ? undefined
-      : this.getScopedEmployeeId(user);
-
-    return this.prisma.employee.findMany({
-      where: {
-        AND: [
-          query
-            ? {
-                OR: [
-                  { fullName: { contains: query, mode: 'insensitive' } },
-                  { phone: { contains: query, mode: 'insensitive' } },
-                ],
-              }
-            : {},
-          departmentId ? { departmentId } : {},
-          status ? { status } : {},
-          scopedEmployeeId ? { id: scopedEmployeeId } : {},
-        ],
-      },
-      include: this.employeeInclude,
+    const result = await this.findAll(user, {
+      query,
+      departmentId,
+      status,
+      page: 1,
+      pageSize: 200,
     });
+    return result.items;
   }
 }

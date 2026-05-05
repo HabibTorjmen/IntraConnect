@@ -22,6 +22,10 @@ import { TrainingModule } from '../training/training.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { NotificationModule } from '../notification/notification.module';
 import { RoleModule } from '../role/role.module';
+import { StorageModule } from '../storage/storage.module';
+import { FacilityModule } from '../facility/facility.module';
+import { ToolModule } from '../tool/tool.module';
+import { AttendanceModule } from '../attendance/attendance.module';
 
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditInterceptor } from '../../interceptors/audit.interceptor';
@@ -29,6 +33,7 @@ import { AuditInterceptor } from '../../interceptors/audit.interceptor';
   imports: [
     LoggerModule,
     PrismaModule,
+    StorageModule,
     AuthModule,
     UserModule,
     EmployeeModule,
@@ -42,6 +47,9 @@ import { AuditInterceptor } from '../../interceptors/audit.interceptor';
     DashboardModule,
     NotificationModule,
     RoleModule,
+    FacilityModule,
+    ToolModule,
+    AttendanceModule,
     ConfigModule.forRoot({ isGlobal: true, load: [() => GLOBAL_CONFIG] }),
   ],
   controllers: [AppController],

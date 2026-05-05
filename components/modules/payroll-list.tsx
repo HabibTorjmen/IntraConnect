@@ -1,17 +1,42 @@
 'use client'
 
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import { AppContext } from '@/context/app-context'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { FileDown, DollarSign, Wallet, TrendingUp, Calendar } from 'lucide-react'
+import { FileDown, DollarSign, Wallet, TrendingUp, Lock } from 'lucide-react'
 
 export default function PayrollList() {
   const { payrolls, isLoading } = useContext(AppContext)
+  const [reauthOpen, setReauthOpen] = useState(false)
+  const [reauthPwd, setReauthPwd] = useState('')
+  const [pendingPayrollId, setPendingPayrollId] = useState<string | null>(null)
+  const [reauthError, setReauthError] = useState<string | null>(null)
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount)
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount)
+
+  const requestDownload = (id: string) => {
+    setPendingPayrollId(id)
+    setReauthPwd('')
+    setReauthError(null)
+    setReauthOpen(true)
+  }
+
+  const confirmReauthAndDownload = () => {
+    if (!reauthPwd) {
+      setReauthError('Password required.')
+      return
+    }
+    // In demo mode we accept any non-empty password.
+    // When wired to backend, POST /payroll/:id/download with { password } and use the signed URL.
+    setReauthOpen(false)
+    alert(`Demo: payslip ${pendingPayrollId} download authorized. (Backend will return a signed URL.)`)
+    setPendingPayrollId(null)
+    setReauthPwd('')
   }
 
   return (
@@ -19,17 +44,7 @@ export default function PayrollList() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Payroll & Payslips</h1>
-          <p className="text-slate-600 mt-1">View your monthly earnings and download payslips</p>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" className="gap-2 border-slate-200">
-            <Calendar size={18} />
-            History
-          </Button>
-          <Button className="gap-2 bg-blue-600 hover:bg-blue-700 shadow-md">
-            <DollarSign size={18} />
-            Advance Request
-          </Button>
+          <p className="text-slate-600 mt-1">charge.docx §4.8 — re-auth required, signed URL only, no email attachments.</p>
         </div>
       </div>
 
@@ -55,8 +70,10 @@ export default function PayrollList() {
               <TrendingUp size={24} />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900">{formatCurrency(450.50)}</p>
-          <p className="text-slate-500 text-sm mt-1">Bonuses & Allowances</p>
+          <p className="text-2xl font-bold text-slate-900">
+            {payrolls[0] ? formatCurrency(payrolls[0].allowances) : formatCurrency(0)}
+          </p>
+          <p className="text-slate-500 text-sm mt-1">Allowances</p>
         </Card>
 
         <Card className="p-6 bg-white border-slate-200 shadow-sm">
@@ -65,8 +82,10 @@ export default function PayrollList() {
               <TrendingUp size={24} className="rotate-180" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900">{formatCurrency(120.40)}</p>
-          <p className="text-slate-500 text-sm mt-1">Tax Deductions</p>
+          <p className="text-2xl font-bold text-slate-900">
+            {payrolls[0] ? formatCurrency(payrolls[0].deductions) : formatCurrency(0)}
+          </p>
+          <p className="text-slate-500 text-sm mt-1">Deductions</p>
         </Card>
       </div>
 
@@ -110,7 +129,13 @@ export default function PayrollList() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" className="gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => requestDownload(payroll.id)}
+                    >
+                      <Lock size={14} />
                       <FileDown size={16} />
                       PDF
                     </Button>
@@ -128,6 +153,33 @@ export default function PayrollList() {
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={reauthOpen} onOpenChange={setReauthOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Re-authentication required</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              charge.docx §4.8 requires re-entering your password before accessing payslips.
+            </p>
+            <Input
+              type="password"
+              placeholder="Your account password"
+              value={reauthPwd}
+              onChange={(e) => setReauthPwd(e.target.value)}
+              autoFocus
+            />
+            {reauthError && <p className="text-sm text-rose-600">{reauthError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReauthOpen(false)}>Cancel</Button>
+            <Button onClick={confirmReauthAndDownload} className="bg-blue-600 hover:bg-blue-700">
+              Confirm & download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -5,6 +5,7 @@ export enum LeaveStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
+  CANCELLED = 'cancelled',
 }
 
 export class CreateLeaveDTO {

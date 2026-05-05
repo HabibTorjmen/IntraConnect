@@ -5,13 +5,13 @@ import { AuthContext } from '@/context/auth-context'
 import { AppContext } from '@/context/app-context'
 import { Card } from '@/components/ui/card'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
-import { Users, FileText, CheckCircle, Clock, Building2, ShieldAlert, Network, UserPlus } from 'lucide-react'
+import { Users, FileText, CheckCircle, Clock, Building2, ShieldAlert, Network, UserPlus, Ticket as TicketIcon, Folder, Wallet, Wrench, Timer } from 'lucide-react'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function Dashboard() {
   const { user } = useContext(AuthContext)
-  const { employees, leaveRequests } = useContext(AppContext)
+  const { employees, leaveRequests, tickets, documents, payrolls, tools, attendance, facilityRequests } = useContext(AppContext)
 
   const chartData = [
     { name: 'Active', value: employees.filter(e => e.status === 'active').length },
@@ -133,60 +133,102 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-        {/* Facility Summary Widget */}
-        <Card className="p-5 border-l-4 border-l-amber-500">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">
+        {/* Tickets — charge.docx §4.4 */}
+        <Card className="p-5 border-l-4 border-l-rose-500">
           <div className="flex items-center gap-3 mb-4">
-            <Building2 className="text-amber-500" size={20} />
-            <h3 className="font-bold">Facility Status</h3>
+            <TicketIcon className="text-rose-500" size={20} />
+            <h3 className="font-bold">Help Desk</h3>
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Active Incidents</span>
-              <span className="font-semibold">3</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Next Maint.</span>
-              <span className="font-semibold text-blue-600">Apr 25</span>
-            </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Open</span><span className="font-semibold">{tickets.filter(t => t.status !== 'closed' && t.status !== 'resolved').length}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">SLA breached</span><span className="font-semibold text-rose-600">{tickets.filter(t => t.slaStatus === 'BREACHED').length}</span></div>
           </div>
         </Card>
 
-        {/* Audit Log Quick View (Admin Only) */}
+        {/* Facility — charge.docx §4.5 */}
+        <Card className="p-5 border-l-4 border-l-amber-500">
+          <div className="flex items-center gap-3 mb-4">
+            <Building2 className="text-amber-500" size={20} />
+            <h3 className="font-bold">Facility</h3>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Open requests</span><span className="font-semibold">{facilityRequests.filter(r => r.status !== 'closed' && r.status !== 'resolved').length}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Critical</span><span className="font-semibold text-rose-600">{facilityRequests.filter(r => r.urgency === 'critical').length}</span></div>
+          </div>
+        </Card>
+
+        {/* Documents — charge.docx §4.7 */}
+        <Card className="p-5 border-l-4 border-l-violet-500">
+          <div className="flex items-center gap-3 mb-4">
+            <Folder className="text-violet-500" size={20} />
+            <h3 className="font-bold">Documents</h3>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Active</span><span className="font-semibold">{documents.filter(d => d.isLatest && !d.isDeleted).length}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Expiring soon</span><span className="font-semibold text-amber-600">{documents.filter(d => d.expiresAt && new Date(d.expiresAt).getTime() - Date.now() < 30 * 24 * 3600 * 1000 && new Date(d.expiresAt).getTime() > Date.now()).length}</span></div>
+          </div>
+        </Card>
+
+        {/* Payroll — charge.docx §4.8 */}
+        <Card className="p-5 border-l-4 border-l-emerald-500">
+          <div className="flex items-center gap-3 mb-4">
+            <Wallet className="text-emerald-500" size={20} />
+            <h3 className="font-bold">Payroll</h3>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Payslips</span><span className="font-semibold">{payrolls.length}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Latest period</span><span className="font-semibold">{payrolls[0] ? `${payrolls[0].month}/${payrolls[0].year}` : '—'}</span></div>
+          </div>
+        </Card>
+
+        {/* Time Tracking — charge.docx §4.12 */}
+        <Card className="p-5 border-l-4 border-l-blue-500">
+          <div className="flex items-center gap-3 mb-4">
+            <Timer className="text-blue-500" size={20} />
+            <h3 className="font-bold">Attendance</h3>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Records today</span><span className="font-semibold">{attendance.filter(r => r.date === new Date().toISOString().slice(0,10)).length}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Total worked (min)</span><span className="font-semibold">{attendance.reduce((s, r) => s + r.workedMinutes, 0)}</span></div>
+          </div>
+        </Card>
+
+        {/* Tools — charge.docx §4.11 */}
+        <Card className="p-5 border-l-4 border-l-cyan-500">
+          <div className="flex items-center gap-3 mb-4">
+            <Wrench className="text-cyan-500" size={20} />
+            <h3 className="font-bold">Tools</h3>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Active</span><span className="font-semibold">{tools.filter(t => t.active).length}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-semibold">{tools.length}</span></div>
+          </div>
+        </Card>
+
+        {/* Audit (Admin) */}
         {user?.role === 'admin' && (
           <Card className="p-5 border-l-4 border-l-indigo-500">
             <div className="flex items-center gap-3 mb-4">
               <ShieldAlert className="text-indigo-500" size={20} />
               <h3 className="font-bold">Security & Audit</h3>
             </div>
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">System Logs (24h)</span>
-                <span className="font-semibold">142</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Critical Alerts</span>
-                <span className="font-semibold text-emerald-600">0</span>
-              </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Mapped Roles</span><span className="font-semibold">{employees.length > 0 ? new Set(employees.map(e => e.roleId)).size : 0}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Critical Alerts</span><span className="font-semibold text-emerald-600">0</span></div>
             </div>
           </Card>
         )}
 
-        {/* Job Titles / Hierarchy Widget */}
-        <Card className="p-5 border-l-4 border-l-blue-500">
+        {/* Org structure */}
+        <Card className="p-5 border-l-4 border-l-slate-500">
           <div className="flex items-center gap-3 mb-4">
-            <Network className="text-blue-500" size={20} />
+            <Network className="text-slate-500" size={20} />
             <h3 className="font-bold">Org Structure</h3>
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Mapped Roles</span>
-              <span className="font-semibold">14</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Open Positions</span>
-              <span className="font-semibold text-blue-600">2</span>
-            </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Departments</span><span className="font-semibold">{new Set(employees.map(e => e.department)).size}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Active</span><span className="font-semibold">{employees.filter(e => e.status === 'active').length}</span></div>
           </div>
         </Card>
       </div>

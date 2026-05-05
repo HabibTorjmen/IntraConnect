@@ -1,29 +1,72 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards, Query, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  UseGuards,
+  Query,
+  UseInterceptors,
+  UploadedFile,
+  NotFoundException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Response } from 'express';
-import { join } from 'path';
 import { DocumentService } from './document.service';
 import { JwtAuthGuard } from '../auth/auth.jwt.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { CheckPermissions } from '../auth/permissions.decorator';
 import { AuthUser } from '../auth/auth.user.decorator';
+import {
+  COMPANY_CATEGORIES,
+  EMPLOYEE_CATEGORIES,
+  DocumentType,
+} from './document.constants';
 
 @Controller('documents')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DocumentController {
   constructor(private readonly documentService: DocumentService) {}
 
+  @Get('categories')
+  @CheckPermissions({ action: 'read', module: 'documents' })
+  categories() {
+    return { company: COMPANY_CATEGORIES, employee: EMPLOYEE_CATEGORIES };
+  }
+
   @Post('upload')
   @CheckPermissions({ action: 'create', module: 'documents' })
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { title: string; description?: string; category?: string; type: string; isPublic?: string },
+    @Body() body: {
+      title: string;
+      description?: string;
+      category?: string;
+      type: string;
+      isPublic?: string;
+      expiresAt?: string;
+    },
     @AuthUser() user: any,
   ) {
     return this.documentService.uploadDocument(file, {
       ...body,
       isPublic: body.isPublic === 'true',
+      employeeId: user.employee.id,
+    });
+  }
+
+  @Post('bulk-zip')
+  @CheckPermissions({ action: 'manage', module: 'documents' })
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkZip(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { type: DocumentType; category?: string },
+    @AuthUser() user: any,
+  ) {
+    return this.documentService.bulkZipUpload(file, {
+      type: body.type,
+      category: body.category,
       employeeId: user.employee.id,
     });
   }
@@ -39,21 +82,26 @@ export class DocumentController {
     return this.documentService.updateVersion(id, file, user.employee.id);
   }
 
+  @Post(':versionId/restore')
+  @CheckPermissions({ action: 'manage', module: 'documents' })
+  async restoreVersion(@Param('versionId') versionId: string, @AuthUser() user: any) {
+    return this.documentService.restoreVersion(versionId, user.employee.id);
+  }
+
+  @Get(':id/versions')
+  @CheckPermissions({ action: 'read', module: 'documents' })
+  versions(@Param('id') id: string) {
+    return this.documentService.findVersions(id);
+  }
+
   @Get('download/:id')
   @CheckPermissions({ action: 'read', module: 'documents' })
   async downloadFile(
     @Param('id') id: string,
     @AuthUser() user: any,
-    @Res() res: Response
-  ) {
-    const document = await this.documentService.findOne(id);
-    if (!document) return res.status(404).json({ message: 'Document not found' });
-
-    // Log the download
-    await this.documentService.logAccess(id, user.id, 'download');
-
-    const filePath = join(process.cwd(), document.url);
-    return res.download(filePath, document.filename || document.title);
+  ): Promise<{ url: string }> {
+    const url = await this.documentService.getDownloadUrl(id, user.id);
+    return { url };
   }
 
   @Get()
@@ -62,27 +110,38 @@ export class DocumentController {
     const where: any = {};
     if (type) where.type = type;
 
-    // Filter by employeeId if not admin/HR
-    const isPowerful = user.roles.some(role => ['admin', 'hr'].includes(role.name));
+    const isPowerful = user.roles.some((role: any) =>
+      ['admin', 'hr'].includes(role.name),
+    );
     if (!isPowerful) {
       where.employeeId = user.employee.id;
     }
 
-    return this.documentService.findAll({ 
-      where,
-      orderBy: { createdAt: 'desc' }
-    });
+    return this.documentService.findAll(
+      { where, orderBy: { createdAt: 'desc' } },
+      { includeExpired: isPowerful, includeDeleted: false },
+    );
   }
 
   @Get(':id')
   @CheckPermissions({ action: 'read', module: 'documents' })
-  findOne(@Param('id') id: string) {
-    return this.documentService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    const doc = await this.documentService.findOne(id);
+    if (!doc) throw new NotFoundException('Document not found');
+    return doc;
   }
 
+  /** charge.docx §4.7: default delete is soft-delete. */
   @Delete(':id')
-  @CheckPermissions({ action: 'manage', module: 'all' })
+  @CheckPermissions({ action: 'manage', module: 'documents' })
   remove(@Param('id') id: string) {
-    return this.documentService.remove(id);
+    return this.documentService.softDelete(id);
+  }
+
+  /** Admin-only permanent purge. */
+  @Delete(':id/permanent')
+  @CheckPermissions({ action: 'manage', module: 'all' })
+  permanentRemove(@Param('id') id: string) {
+    return this.documentService.permanentDelete(id);
   }
 }

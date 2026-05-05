@@ -25,6 +25,8 @@ import StaffDirectory from '@/components/modules/staff-directory'
 import Tools from '@/components/modules/tools'
 import AdminSettings from '@/components/modules/admin-settings'
 import RoleManagement from '@/components/modules/role-management'
+import TimeTracking from '@/components/modules/time-tracking'
+import LeaveConfig from '@/components/modules/leave-config'
 
 export default function MainLayout() {
   const { user, logout } = useContext(AuthContext)
@@ -87,6 +89,10 @@ export default function MainLayout() {
         return <AdminSettings />
       case 'role-management':
         return <RoleManagement />
+      case 'time-tracking':
+        return <TimeTracking />
+      case 'leave-config':
+        return <LeaveConfig />
       case 'profile':
         return <ProfilePage />
       default:

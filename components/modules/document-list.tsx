@@ -36,12 +36,25 @@ export default function DocumentList() {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 
+  // charge.docx §4.7 fixed taxonomy
+  const COMPANY_CATEGORIES = [
+    { value: 'POLICIES', label: 'Policies & Procedures' },
+    { value: 'EMPLOYEE_HANDBOOK', label: 'Employee Handbook' },
+    { value: 'SAFETY_GUIDELINES', label: 'Safety Guidelines' },
+    { value: 'QUALITY_STANDARDS', label: 'Quality Standards' },
+    { value: 'FORMS_TEMPLATES', label: 'Forms & Templates' },
+    { value: 'TRAINING_MATERIALS', label: 'Training Materials' },
+    { value: 'COMPANY_ANNOUNCEMENTS', label: 'Announcements' },
+    { value: 'CERTIFICATES_LICENSES', label: 'Certificates & Licenses' },
+  ]
+
   const [uploadForm, setUploadForm] = useState({
     title: '',
     description: '',
-    category: 'General',
+    category: 'POLICIES',
     isPublic: false,
-    file: null as File | null
+    expiresAt: '',
+    file: null as File | null,
   })
 
   const [dragActive, setDragActive] = useState(false)
@@ -107,7 +120,7 @@ export default function DocumentList() {
 
       await uploadDocument(formData)
       setIsUploadOpen(false)
-      setUploadForm({ title: '', description: '', category: 'General', isPublic: false, file: null })
+      setUploadForm({ title: '', description: '', category: 'POLICIES', isPublic: false, expiresAt: '', file: null })
     } catch (err: any) {
       alert('Upload failed: ' + err.message)
     }
@@ -239,11 +252,9 @@ export default function DocumentList() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="General">General</SelectItem>
-                          <SelectItem value="HR">Human Resources</SelectItem>
-                          <SelectItem value="Finance">Finance</SelectItem>
-                          <SelectItem value="Legal">Legal</SelectItem>
-                          <SelectItem value="IT">IT Infrastructure</SelectItem>
+                          {COMPANY_CATEGORIES.map(c => (
+                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -262,6 +273,18 @@ export default function DocumentList() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Expiry date (optional)</label>
+                    <Input
+                      type="date"
+                      value={uploadForm.expiresAt}
+                      onChange={(e) => setUploadForm(prev => ({ ...prev, expiresAt: e.target.value }))}
+                    />
+                    <p className="text-xs text-slate-500">
+                      charge.docx §4.7: HR is notified before expiry; expired documents are auto-hidden from employees.
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>

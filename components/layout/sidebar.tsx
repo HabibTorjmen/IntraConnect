@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Users, Calendar, FileText, Ticket, Folder, UserPlus, FileSpreadsheet, BookOpen, MessageSquare, Building2, Network, Shield, Wrench } from 'lucide-react'
+import { Home, Users, Calendar, FileText, Ticket, Folder, UserPlus, FileSpreadsheet, BookOpen, MessageSquare, Building2, Network, Shield, Wrench, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export default function Sidebar({ activeModule, setActiveModule, userRole }: Sid
     { id: 'employees', label: 'Employees', icon: Users, roles: ['manager', 'admin'] },
     { id: 'directory', label: 'Directory', icon: Network, roles: ['employee', 'manager', 'admin'] },
     { id: 'leaves', label: 'Leaves', icon: Calendar, roles: ['employee', 'manager', 'admin'] },
+    { id: 'time-tracking', label: 'Time Tracking', icon: Clock, roles: ['employee', 'manager', 'admin'] },
     { id: 'tickets', label: 'Help Desk', icon: Ticket, roles: ['employee', 'manager', 'admin'] },
     { id: 'documents', label: 'Documents', icon: Folder, roles: ['employee', 'manager', 'admin'] },
     { id: 'facility', label: 'Facility MGMT', icon: Building2, roles: ['employee', 'manager', 'admin'] },
@@ -100,6 +101,19 @@ export default function Sidebar({ activeModule, setActiveModule, userRole }: Sid
             >
               <UserPlus size={20} />
               Onboarding
+            </Button>
+
+            <Button
+              variant={activeModule === 'leave-config' ? 'default' : 'ghost'}
+              className={`w-full justify-start gap-3 ${
+                activeModule === 'leave-config'
+                  ? 'bg-blue-600 hover:bg-blue-700'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              onClick={() => setActiveModule('leave-config')}
+            >
+              <Calendar size={20} />
+              Leave Config
             </Button>
 
             <Button

@@ -23,16 +23,27 @@ interface TicketDetailProps {
 
 export default function TicketDetail({ ticket, onClose }: TicketDetailProps) {
   const { user } = useContext(AuthContext)
-  const { addTicketComment, updateTicket, employees, assignTicket } = useContext(AppContext)
+  const { addTicketComment, updateTicket, employees, assignTicket, rateTicket, mergeTicket, setCommentInternal, tickets } = useContext(AppContext)
   const [newComment, setNewComment] = useState('')
+  const [commentIsInternal, setCommentIsInternal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [rating, setRating] = useState<number>(0)
+  const [feedback, setFeedback] = useState('')
+  const [mergeTargetId, setMergeTargetId] = useState('')
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return
     setIsSubmitting(true)
     try {
       await addTicketComment(ticket.id, newComment)
+      // mark as internal if requested (admin/manager only)
+      if (commentIsInternal && (user?.role === 'admin' || user?.role === 'manager')) {
+        // best-effort: find the latest comment and flip its flag
+        const latest = (ticket.comments || [])[(ticket.comments || []).length - 1]
+        if (latest) setCommentInternal(latest.id, true)
+      }
       setNewComment('')
+      setCommentIsInternal(false)
     } catch (err) {
       console.error(err)
     } finally {
@@ -40,9 +51,23 @@ export default function TicketDetail({ ticket, onClose }: TicketDetailProps) {
     }
   }
 
+  const handleSubmitRating = async () => {
+    if (rating < 1 || rating > 5) return
+    await rateTicket(ticket.id, rating, feedback)
+    setRating(0)
+    setFeedback('')
+  }
+
+  const handleMerge = async () => {
+    if (!mergeTargetId) return
+    await mergeTicket(ticket.id, mergeTargetId)
+    setMergeTargetId('')
+    onClose()
+  }
+
   const handleStatusChange = async (newStatus: string) => {
     try {
-      await updateTicket(ticket.id, { status: newStatus })
+      await updateTicket(ticket.id, { status: newStatus as Ticket['status'] })
     } catch (err) {
       console.error(err)
     }
@@ -190,6 +215,87 @@ export default function TicketDetail({ ticket, onClose }: TicketDetailProps) {
               </div>
             </div>
 
+            {/* Attachments */}
+            {ticket.attachments && ticket.attachments.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs uppercase tracking-wider font-bold text-slate-400">Attachments</h3>
+                <ul className="space-y-1">
+                  {ticket.attachments.map(a => (
+                    <li key={a.id} className="flex items-center gap-2 text-sm">
+                      <Paperclip size={14} className="text-slate-400" />
+                      <span className="text-slate-700">{a.filename}</span>
+                      <span className="text-xs text-slate-400">{(a.size / 1024).toFixed(0)} KB</span>
+                      {a.isResolution && <Badge variant="outline" className="text-[10px]">resolution</Badge>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Resolution rating (charge.docx §4.4) */}
+            {(ticket.status === 'closed' || ticket.status === 'resolved') && (
+              <div className="p-4 border border-amber-200 bg-amber-50/40 rounded-xl space-y-3">
+                <h3 className="text-xs uppercase tracking-wider font-bold text-amber-700">Resolution Feedback</h3>
+                {ticket.resolutionRating ? (
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Rated {'★'.repeat(ticket.resolutionRating)}{'☆'.repeat(5 - ticket.resolutionRating)}
+                    </p>
+                    {ticket.resolutionFeedback && (
+                      <p className="text-sm text-slate-600 mt-1">{ticket.resolutionFeedback}</p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-1">Rating is immutable.</p>
+                  </div>
+                ) : ticket.employeeId === user?.employeeId ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => setRating(n)}
+                          className={`text-2xl ${rating >= n ? 'text-amber-500' : 'text-slate-300'}`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                    <Textarea
+                      placeholder="Optional comment"
+                      value={feedback}
+                      onChange={e => setFeedback(e.target.value)}
+                      className="text-sm"
+                      rows={2}
+                    />
+                    <Button size="sm" onClick={handleSubmitRating} disabled={rating < 1}>
+                      Submit rating
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Awaiting requester rating.</p>
+                )}
+              </div>
+            )}
+
+            {/* Merge duplicate (admin) */}
+            {user?.role === 'admin' && (
+              <div className="p-4 border border-slate-200 rounded-xl space-y-2 bg-slate-50/30">
+                <h3 className="text-xs uppercase tracking-wider font-bold text-slate-500">Merge as duplicate</h3>
+                <div className="flex gap-2">
+                  <select
+                    className="flex-1 text-sm border border-slate-200 rounded px-2 py-1"
+                    value={mergeTargetId}
+                    onChange={e => setMergeTargetId(e.target.value)}
+                  >
+                    <option value="">Select target ticket…</option>
+                    {tickets.filter(t => t.id !== ticket.id).map(t => (
+                      <option key={t.id} value={t.id}>#{t.id.slice(0, 8)} — {t.title}</option>
+                    ))}
+                  </select>
+                  <Button size="sm" onClick={handleMerge} disabled={!mergeTargetId}>Merge</Button>
+                </div>
+              </div>
+            )}
+
             {/* Comments Section */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h3 className="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-2">
@@ -212,7 +318,8 @@ export default function TicketDetail({ ticket, onClose }: TicketDetailProps) {
                           {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
                         </span>
                       </div>
-                      <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-2xl rounded-tl-none border border-slate-100">
+                      <div className={`text-sm p-3 rounded-2xl rounded-tl-none border ${comment.isInternal ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+                        {comment.isInternal && <span className="block text-[10px] font-semibold uppercase tracking-wide mb-1">Internal note</span>}
                         {comment.content}
                       </div>
                     </div>
@@ -249,10 +356,16 @@ export default function TicketDetail({ ticket, onClose }: TicketDetailProps) {
             </Button>
           </div>
           <div className="flex items-center justify-between mt-2">
-            <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-slate-400 hover:text-slate-600">
-              <Paperclip size={12} className="mr-1" />
-              Attach Files
-            </Button>
+            {(user?.role === 'admin' || user?.role === 'manager') ? (
+              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={commentIsInternal}
+                  onChange={e => setCommentIsInternal(e.target.checked)}
+                />
+                Internal note (not visible to requester)
+              </label>
+            ) : <span />}
             <p className="text-[10px] text-slate-400">Shift + Enter for new line</p>
           </div>
         </div>

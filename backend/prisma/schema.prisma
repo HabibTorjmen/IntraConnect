@@ -8,16 +8,34 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  username      String         @unique
-  email         String         @unique
-  passwordHash  String
-  isActive      Boolean        @default(true)
-  employee      Employee?
-  roles         Role[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
-  documentLogs  DocumentAccessLog[]
+  id                  String         @id @default(uuid())
+  username            String         @unique
+  email               String         @unique
+  passwordHash        String
+  isActive            Boolean        @default(true)
+  mustChangePassword  Boolean        @default(false)
+  passwordChangedAt   DateTime?
+  failedLoginAttempts Int            @default(0)
+  lockedUntil         DateTime?
+  employee            Employee?
+  roles               Role[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  documentLogs        DocumentAccessLog[]
+  otps                OneTimePassword[]
+}
+
+model OneTimePassword {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hashedOtp  String
+  purpose    String    // first_login | password_reset
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, purpose])
 }
 
 model Employee {
@@ -26,12 +44,21 @@ model Employee {
   personalEmail       String?
   phone               String?
   address             String?
+  dateOfBirth         DateTime?
   joinDate            DateTime             @default(now())
   status              String               @default("active") // active, inactive, onboarding
-  
+  contractType        String?              // CDI, CDD, Internship, Contractor — charge.docx §4.1
+  workLocation        String?
+  salaryGrade         String?
+  probationEndDate    DateTime?
+  hrNotes             String?
+  emergencyName       String?
+  emergencyPhone      String?
+  emergencyRelation   String?
+
   departmentId        String?
   department          Department?          @relation(fields: [departmentId], references: [id])
-  
+
   jobTitleId          String?
   jobTitle            JobTitle?            @relation(fields: [jobTitleId], references: [id])
   
@@ -52,12 +79,15 @@ model Employee {
   authoredFeedback     PerformanceFeedback[] @relation("AuthoredFeedback")
   trainingPlans       TrainingPlan[]
   ticketComments      TicketComment[]
+  attendanceEvents    AttendanceEvent[]
+  attendanceRecords   AttendanceRecord[]
 }
 
 model Department {
   id        String     @id @default(uuid())
   name      String     @unique
   employees Employee[]
+  tools     Tool[]     @relation("ToolDepartments")
 }
 
 model Role {
@@ -80,12 +110,19 @@ model Permission {
 }
 
 model Tool {
-  id          String  @id @default(uuid())
-  name        String
-  category    String
-  url         String?
-  description String?
-  roles       Role[]
+  id           String   @id @default(uuid())
+  name         String
+  category     String
+  url          String?
+  description  String?
+  instructions String?
+  iconUrl      String?
+  priority     Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  roles        Role[]
+  departments  Department[] @relation("ToolDepartments")
 }
 
 model JobTitle {
@@ -99,28 +136,89 @@ model LeaveRequest {
   id          String   @id @default(uuid())
   startDate   DateTime
   endDate     DateTime
-  type        String   // annual, sick, etc.
+  type        String   // legacy free-form code; new requests link via leaveTypeId
   reason      String?
-  status      String   @default("pending") // pending, approved, rejected
+  status      String   @default("pending") // pending, approved, rejected, cancelled
+  workingDays Int?     // computed working-day count excluding weekends + holidays
   createdAt   DateTime @default(now())
-  
+  cancelledAt DateTime?
+
   employeeId  String
   employee    Employee @relation(fields: [employeeId], references: [id])
-  
+
+  leaveTypeId String?
+  leaveType   LeaveType? @relation(fields: [leaveTypeId], references: [id])
+
   approvedById String?
-  // Logic for approver will be in code
+}
+
+model LeaveType {
+  id                  String          @id @default(uuid())
+  code                String          @unique // ANNUAL, SICK, EMERGENCY, UNPAID, MATERNITY, PATERNITY, BEREAVEMENT, ...
+  name                String
+  description         String?
+  isActive            Boolean         @default(true)
+  policy              LeavePolicy?
+  requests            LeaveRequest[]
+}
+
+model LeavePolicy {
+  id                       String     @id @default(uuid())
+  leaveTypeId              String     @unique
+  leaveType                LeaveType  @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  annualEntitlementDays    Int        @default(0)
+  accrualMethod            String     @default("annual_grant") // annual_grant | monthly
+  carryForwardAllowed      Boolean    @default(false)
+  maxCarryForwardDays      Int        @default(0)
+  carryForwardExpiryMonths Int        @default(0)
+  minDaysPerRequest        Int        @default(1)
+  maxDaysPerRequest        Int        @default(365)
+  advanceNoticeDays        Int        @default(0)
+  blackoutPeriods          Json?      // [{ start: ISO, end: ISO, reason: string }]
+  weekendDays              Json       @default("[6,0]") // 0=Sun..6=Sat ; default Sat+Sun
+  allowNegativeBalance     Boolean    @default(false)
+}
+
+model Holiday {
+  id        String   @id @default(uuid())
+  date      DateTime @db.Date
+  name      String
+  recurring Boolean  @default(false)
+
+  @@unique([date, name])
 }
 
 model PayrollRecord {
-  id         String   @id @default(uuid())
-  period     String   // e.g., "2026-04"
-  netAmount  Decimal
-  payDate    DateTime @default(now())
-  pdfUrl     String?  // Storage path
-  status     String   @default("generated")
-  
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
+  id          String   @id @default(uuid())
+  period      String   // e.g., "2026-04"
+  netAmount   Decimal  @default(0)
+  payDate     DateTime @default(now())
+  pdfUrl      String?  // S3 object key
+  filename    String?
+  size        Int?
+  status      String   @default("draft") // draft, published
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  accessLogs  PayrollAccessLog[]
+
+  @@unique([employeeId, period])
+}
+
+model PayrollAccessLog {
+  id        String   @id @default(uuid())
+  payrollId String
+  payroll   PayrollRecord @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  userId    String
+  action    String   // upload, publish, view, download, delete, failed_access
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([payrollId, action])
 }
 
 model OnboardingChecklist {
@@ -143,11 +241,18 @@ model OnboardingTask {
 model Notification {
   id        String   @id @default(uuid())
   message   String
+  subject   String?
   type      String?  // info, warning, error
+  channel   String   @default("in_app") // in_app | email
+  critical  Boolean  @default(false)    // critical notifs cannot be muted
   isRead    Boolean  @default(false)
+  deliveryStatus String? // sent | failed | queued | n_a
+  deliveryError  String?
   createdAt DateTime @default(now())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model AuditLog {
@@ -164,21 +269,25 @@ model Document {
   id          String   @id @default(uuid())
   title       String
   description String?
-  url         String   // file path or S3 link
+  url         String   // S3 object key
   filename    String?
   size        Int?
-  type        String   // "personal", "company", "policy", "project"
-  category    String?  // "HR", "Technical", "Legal", etc.
+  type        String   // "personal", "company"
+  category    String?  // restricted to charge.docx §4.7 taxonomy at API layer
   version     Int      @default(1)
   isLatest    Boolean  @default(true)
   parentId    String?  // For versioning
   isPublic    Boolean  @default(false)
+  expiresAt   DateTime?
+  publishedAt DateTime?
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   employeeId  String
   employee    Employee @relation(fields: [employeeId], references: [id])
-  
+
   accessLogs  DocumentAccessLog[]
 }
 
@@ -198,27 +307,56 @@ model Ticket {
   id           String          @id @default(uuid())
   title        String
   description  String
-  status       String          @default("open")
+  status       String          @default("new") // new, in_progress, pending_employee, resolved, closed
   priority     String          @default("medium")
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-  
+  closedAt     DateTime?
+
   // SLA Fields
-  slaDeadline  DateTime?
-  slaStatus    String          @default("ON_TRACK") // ON_TRACK, NEAR_BREACH, BREACHED
-  
+  slaDeadline      DateTime?
+  slaStatus        String   @default("ON_TRACK") // ON_TRACK, NEAR_BREACH, BREACHED
+  slaPausedAt      DateTime?
+  slaPausedDurationMs Int   @default(0)
+  escalationLevel  Int      @default(0)
+
+  // Resolution feedback (immutable after submit)
+  resolutionRating   Int?
+  resolutionFeedback String?
+
+  // Duplicate merging
+  mergedIntoId String?
+  mergedInto   Ticket?  @relation("TicketDuplicates", fields: [mergedIntoId], references: [id])
+  duplicates   Ticket[] @relation("TicketDuplicates")
+
   categoryId   String?
   category     TicketCategory? @relation(fields: [categoryId], references: [id])
-  
+
   employeeId   String          @map("creatorId")
   employee     Employee        @relation("TicketCreator", fields: [employeeId], references: [id])
-  
+
   assignedToId String?
   assignedTo   Employee?       @relation("TicketAssignee", fields: [assignedToId], references: [id])
-  
-  location     String?         // Added for Facility Management (Building/Floor/Room)
-  
+
+  location     String?
+
   comments     TicketComment[]
+  attachments  TicketAttachment[]
+
+  facilityRequestId String?         @unique
+  facilityRequest   FacilityRequest? @relation(fields: [facilityRequestId], references: [id])
+}
+
+model TicketAttachment {
+  id         String   @id @default(uuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  url        String   // S3 key
+  filename   String
+  size       Int
+  mime       String
+  isResolution Boolean @default(false)
+  createdAt  DateTime @default(now())
 }
 
 model TicketCategory {
@@ -230,15 +368,72 @@ model TicketCategory {
 }
 
 model TicketComment {
-  id        String   @id @default(uuid())
-  content   String
-  createdAt DateTime @default(now())
-  
-  ticketId  String
-  ticket    Ticket   @relation(fields: [ticketId], references: [id])
-  
-  authorId  String
-  author    Employee @relation(fields: [authorId], references: [id])
+  id         String   @id @default(uuid())
+  content    String
+  isInternal Boolean  @default(false) // charge.docx §4.4: internal vs public
+  createdAt  DateTime @default(now())
+
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id])
+
+  authorId   String
+  author     Employee @relation(fields: [authorId], references: [id])
+}
+
+model FacilityLocation {
+  id           String            @id @default(uuid())
+  name         String
+  type         String            // office_area, meeting_room, restroom, common_area, parking, cafeteria, storage, equipment_room
+  building     String?
+  floor        String?
+  departmentId String?
+  isActive     Boolean           @default(true)
+
+  assets       FacilityAsset[]
+  requests     FacilityRequest[]
+}
+
+model FacilityAsset {
+  id           String           @id @default(uuid())
+  name         String
+  type         String?
+  serialNumber String?
+  purchaseDate DateTime?
+  status       String           @default("active") // active, under_maintenance, retired
+  locationId   String
+  location     FacilityLocation @relation(fields: [locationId], references: [id])
+  requests     FacilityRequest[]
+}
+
+model FacilityRequest {
+  id          String           @id @default(uuid())
+  title       String
+  description String
+  issueType   String           // damage, hvac, cleaning, lighting, electrical, plumbing, safety, security, other
+  urgency     String           @default("normal") // low, normal, high, critical
+  status      String           @default("open")    // open, assigned, in_progress, resolved, closed
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  reporterEmployeeId String
+  locationId         String
+  assetId            String?
+
+  location FacilityLocation @relation(fields: [locationId], references: [id])
+  asset    FacilityAsset?   @relation(fields: [assetId], references: [id])
+
+  photos      FacilityPhoto[]
+  ticketLink  Ticket?         // optional escalation to Help Desk
+}
+
+model FacilityPhoto {
+  id              String          @id @default(uuid())
+  url             String          // S3 key
+  filename        String
+  size            Int
+  facilityRequestId String
+  request         FacilityRequest @relation(fields: [facilityRequestId], references: [id], onDelete: Cascade)
+  createdAt       DateTime        @default(now())
 }
 model Survey {
   id          String           @id @default(uuid())
@@ -280,7 +475,95 @@ model TrainingPlan {
   endDate     DateTime?
   status      String   @default("planned")
   createdAt   DateTime @default(now())
-  
+
   employeeId  String
   employee    Employee @relation(fields: [employeeId], references: [id])
+}
+
+// ============ Module 4.12 — Time Tracking & Attendance ============
+
+model AttendancePolicy {
+  id                   String   @id @default(uuid())
+  name                 String   @unique
+  workingHoursPerDay   Float    @default(8)
+  workingDaysPerWeek   Int      @default(5)
+  weekendDays          Json     @default("[6,0]") // 0=Sun..6=Sat
+  minBreakMinutes      Int      @default(0)
+  maxBreakMinutes      Int      @default(60)
+  breakAfterHours      Float    @default(4)
+  graceLateMinutes     Int      @default(15)
+  earliestClockIn      String?  // HH:mm
+  latestExpectedClockIn String? // HH:mm
+  overtimeThresholdHrs Float    @default(8)
+  overtimeMode         String   @default("tracked") // tracked | allowed
+  maxBreaksPerDay      Int      @default(2)
+  autoCloseAt          String?  // HH:mm — auto end-of-day
+  scope                String   @default("default") // default | role | department | location
+  scopeValue           String?
+}
+
+model AttendanceEvent {
+  id        String   @id @default(uuid())
+  type      String   // clock_in | break_start | break_end | clock_out | auto_close
+  occurredAt DateTime @default(now())
+  source    String   @default("user") // user | hr_correction | auto
+  reason    String?  // mandatory for hr_correction
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  recordId  String?
+  record    AttendanceRecord? @relation(fields: [recordId], references: [id])
+
+  // Audit on correction
+  correctedById String?
+  oldValueIso   String?
+
+  @@index([employeeId, occurredAt])
+}
+
+model AttendanceRecord {
+  id              String  @id @default(uuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  date            DateTime @db.Date
+  workedMinutes   Int     @default(0)
+  breakMinutes    Int     @default(0)
+  status          String  @default("open") // open | closed | flagged | on_leave
+  flags           Json?   // ["late","early_leave","overtime","missing_clock_out"]
+  events          AttendanceEvent[]
+
+  @@unique([employeeId, date])
+}
+
+// ============ Module 4.13 — Dashboard widgets ============
+
+model DashboardWidget {
+  id          String   @id @default(uuid())
+  key         String   @unique // unique key referenced by frontend renderer
+  title       String
+  category    String   // module name: leave | tickets | payroll | ...
+  defaultRoles Json    @default("[]") // role codes the widget is available for by default
+  defaultOrder Int     @default(100)
+  isActive    Boolean  @default(true)
+
+  @@index([category])
+}
+
+model UserDashboardLayout {
+  id      String @id @default(uuid())
+  userId  String @unique
+  layout  Json   // [{ key, order }, ...]
+  updatedAt DateTime @updatedAt
+}
+
+model AttendanceAdjustmentLog {
+  id            String   @id @default(uuid())
+  recordId      String
+  field         String
+  oldValue      String?
+  newValue      String?
+  reason        String
+  adjustedById  String
+  createdAt     DateTime @default(now())
 }

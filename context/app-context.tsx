@@ -29,6 +29,38 @@ export interface Employee {
   roleName?: string
   roleCode?: string
   permissions?: string[]
+  // charge.docx §4.1 optional fields + birthday
+  dateOfBirth?: string
+  address?: string
+  contractType?: 'CDI' | 'CDD' | 'Internship' | 'Contractor' | ''
+  workLocation?: string
+  salaryGrade?: string
+  probationEndDate?: string
+  hrNotes?: string
+  emergencyName?: string
+  emergencyPhone?: string
+  emergencyRelation?: string
+}
+
+// charge.docx §4.12 — Time Tracking
+export type AttendanceState = 'idle' | 'working' | 'on_break' | 'ended'
+
+export interface AttendanceEvent {
+  id: string
+  type: 'clock_in' | 'break_start' | 'break_end' | 'clock_out'
+  occurredAt: string
+  source: 'user' | 'hr_correction' | 'auto'
+  reason?: string
+}
+
+export interface AttendanceRecord {
+  id: string
+  employeeId: string
+  date: string
+  workedMinutes: number
+  breakMinutes: number
+  status: 'open' | 'closed' | 'flagged' | 'on_leave'
+  events: AttendanceEvent[]
 }
 
 export interface LeaveRequest {
@@ -55,6 +87,16 @@ export interface TicketComment {
   createdAt: string
   authorId: string
   authorName: string
+  isInternal?: boolean
+}
+
+export interface TicketAttachment {
+  id: string
+  filename: string
+  size: number
+  mime: string
+  isResolution: boolean
+  createdAt: string
 }
 
 export interface Ticket {
@@ -62,7 +104,7 @@ export interface Ticket {
   title: string
   description: string
   priority: 'low' | 'medium' | 'high' | 'urgent'
-  status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  status: 'new' | 'open' | 'in_progress' | 'pending_employee' | 'resolved' | 'closed'
   categoryId?: string
   categoryName?: string
   employeeId: string
@@ -70,10 +112,15 @@ export interface Ticket {
   assignedToId?: string
   assignedToName?: string
   createdAt: string
+  closedAt?: string
   slaDeadline?: string
   slaStatus?: 'ON_TRACK' | 'NEAR_BREACH' | 'BREACHED'
   location?: string
   comments?: TicketComment[]
+  attachments?: TicketAttachment[]
+  resolutionRating?: number
+  resolutionFeedback?: string
+  mergedIntoId?: string
 }
 
 export interface TrainingPlan {
@@ -115,11 +162,14 @@ export interface Document {
   parentId?: string
   description?: string
   category?: string
+  type?: 'company' | 'personal'
   isPublic: boolean
   uploadedById: string
   uploadedByName?: string
   createdAt: string
   updatedAt: string
+  expiresAt?: string
+  isDeleted?: boolean
 }
 
 export interface DocumentAccessLog {
@@ -221,9 +271,59 @@ export interface AppSettings {
   timezone: string
 }
 
+export interface LeaveType {
+  id: string
+  code: string
+  name: string
+  annualEntitlementDays: number
+  isActive: boolean
+}
+
+export interface Holiday {
+  id: string
+  date: string
+  name: string
+  recurring: boolean
+}
+
+export interface FacilityLocation {
+  id: string
+  name: string
+  type: string
+  building?: string
+  floor?: string
+  isActive: boolean
+}
+
+export interface FacilityAsset {
+  id: string
+  name: string
+  type?: string
+  serialNumber?: string
+  status: 'active' | 'under_maintenance' | 'retired'
+  locationId: string
+}
+
+export interface FacilityRequest {
+  id: string
+  title: string
+  description: string
+  issueType: string
+  urgency: 'low' | 'normal' | 'high' | 'critical'
+  status: 'open' | 'assigned' | 'in_progress' | 'resolved' | 'closed'
+  reporterEmployeeId: string
+  locationId: string
+  assetId?: string
+  photos: { id: string; filename: string; size: number }[]
+  ticketId?: string
+  createdAt: string
+}
+
 interface AppState {
   employees: Employee[]
   leaveRequests: LeaveRequest[]
+  leaveTypes: LeaveType[]
+  holidays: Holiday[]
   tickets: Ticket[]
   ticketCategories: TicketCategory[]
   trainingPlans: TrainingPlan[]
@@ -238,6 +338,10 @@ interface AppState {
   roles: RoleRecord[]
   onboardingPlans: OnboardingPlan[]
   settings: AppSettings
+  attendance: AttendanceRecord[]
+  facilityLocations: FacilityLocation[]
+  facilityAssets: FacilityAsset[]
+  facilityRequests: FacilityRequest[]
 }
 
 interface AppContextType extends AppState {
@@ -273,6 +377,27 @@ interface AppContextType extends AppState {
   updateRole: (id: string, role: Partial<RoleRecord>) => void
   updateSettings: (settings: Partial<AppSettings>) => void
   toggleOnboardingTask: (planId: string, taskId: string) => void
+  // Bulk employee
+  bulkActivateEmployees: (ids: string[], active: boolean) => Promise<void>
+  exportEmployeesCsv: () => void
+  // Leave config
+  upsertLeaveType: (lt: Partial<LeaveType>) => void
+  upsertHoliday: (h: Partial<Holiday>) => void
+  cancelLeaveRequest: (id: string) => void
+  getLeaveBalance: (employeeId: string) => Array<{ leaveType: LeaveType; entitlement: number; used: number; pending: number; available: number }>
+  // Attendance
+  getMyAttendanceState: () => { state: AttendanceState; record?: AttendanceRecord }
+  submitAttendanceAction: (action: 'clock_in' | 'break_start' | 'break_end' | 'clock_out') => Promise<void>
+  getTeamAttendance: () => Array<{ employeeId: string; fullName: string; state: AttendanceState; workedMinutes: number; breakMinutes: number }>
+  // Documents
+  rateTicket: (id: string, rating: number, feedback?: string) => Promise<void>
+  mergeTicket: (sourceId: string, targetId: string) => Promise<void>
+  setCommentInternal: (commentId: string, isInternal: boolean) => void
+  // Facility
+  upsertFacilityLocation: (loc: Partial<FacilityLocation>) => void
+  upsertFacilityAsset: (asset: Partial<FacilityAsset>) => void
+  createFacilityRequest: (req: Partial<FacilityRequest>) => Promise<void>
+  escalateFacilityToTicket: (id: string) => Promise<void>
   isDemoMode: boolean
 }
 
@@ -300,6 +425,26 @@ const defaultNotifications: NotificationItem[] = [
     createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     isRead: false,
   },
+]
+
+const defaultLeaveTypes: LeaveType[] = [
+  { id: 'lt-annual', code: 'ANNUAL', name: 'Annual Leave', annualEntitlementDays: 22, isActive: true },
+  { id: 'lt-sick', code: 'SICK', name: 'Sick Leave', annualEntitlementDays: 12, isActive: true },
+  { id: 'lt-emergency', code: 'EMERGENCY', name: 'Emergency Leave', annualEntitlementDays: 3, isActive: true },
+  { id: 'lt-unpaid', code: 'UNPAID', name: 'Unpaid Leave', annualEntitlementDays: 0, isActive: true },
+  { id: 'lt-maternity', code: 'MATERNITY', name: 'Maternity / Paternity', annualEntitlementDays: 30, isActive: true },
+  { id: 'lt-bereavement', code: 'BEREAVEMENT', name: 'Bereavement', annualEntitlementDays: 5, isActive: true },
+]
+
+const defaultHolidays: Holiday[] = [
+  { id: 'h-1', date: `${new Date().getFullYear()}-01-01`, name: 'New Year', recurring: true },
+  { id: 'h-2', date: `${new Date().getFullYear()}-05-01`, name: 'Labor Day', recurring: true },
+]
+
+const defaultFacilityLocations: FacilityLocation[] = [
+  { id: 'loc-1', name: 'HQ – Floor 1 Open Space', type: 'office_area', building: 'HQ', floor: '1', isActive: true },
+  { id: 'loc-2', name: 'HQ – Meeting Room A', type: 'meeting_room', building: 'HQ', floor: '2', isActive: true },
+  { id: 'loc-3', name: 'HQ – Cafeteria', type: 'cafeteria', building: 'HQ', floor: '0', isActive: true },
 ]
 
 const defaultTools: ToolRecord[] = [
@@ -511,6 +656,8 @@ function buildDefaultState(): AppState {
   return synchronizeRoles({
     employees,
     leaveRequests: [...MOCK_LEAVES],
+    leaveTypes: defaultLeaveTypes,
+    holidays: defaultHolidays,
     tickets: [...MOCK_TICKETS],
     ticketCategories: defaultTicketCategories,
     trainingPlans: [...MOCK_TRAINING],
@@ -529,6 +676,10 @@ function buildDefaultState(): AppState {
       supportEmail: 'support@intraconnect.local',
       timezone: 'Africa/Tunis',
     },
+    attendance: [],
+    facilityLocations: defaultFacilityLocations,
+    facilityAssets: [],
+    facilityRequests: [],
   })
 }
 
@@ -609,6 +760,22 @@ export const AppContext = createContext<AppContextType>({
   updateRole: () => {},
   updateSettings: () => {},
   toggleOnboardingTask: () => {},
+  bulkActivateEmployees: async () => {},
+  exportEmployeesCsv: () => {},
+  upsertLeaveType: () => {},
+  upsertHoliday: () => {},
+  cancelLeaveRequest: () => {},
+  getLeaveBalance: () => [],
+  getMyAttendanceState: () => ({ state: 'idle' as AttendanceState }),
+  submitAttendanceAction: async () => {},
+  getTeamAttendance: () => [],
+  rateTicket: async () => {},
+  mergeTicket: async () => {},
+  setCommentInternal: () => {},
+  upsertFacilityLocation: () => {},
+  upsertFacilityAsset: () => {},
+  createFacilityRequest: async () => {},
+  escalateFacilityToTicket: async () => {},
 })
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -1219,6 +1386,290 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [appendAudit, commit])
 
+  // -------- F3 Bulk employee + CSV export --------
+  const bulkActivateEmployees = useCallback(async (ids: string[], active: boolean) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      next.employees = next.employees.map(e =>
+        ids.includes(e.id) ? { ...e, status: active ? 'active' : 'inactive' } : e,
+      )
+      appendAudit(next, active ? 'BULK_ACTIVATE' : 'BULK_DEACTIVATE', 'EMPLOYEES', `${ids.length} employees`)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const exportEmployeesCsv = useCallback(() => {
+    if (typeof window === 'undefined') return
+    const header = ['id','name','email','phone','department','position','status','contractType','joinDate','dateOfBirth','workLocation']
+    const escape = (v: any) => {
+      if (v === null || v === undefined) return ''
+      const s = String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const rows = state.employees.map(e => [
+      e.id, e.name, e.email, e.phone, e.department, e.position, e.status,
+      e.contractType ?? '', e.joinDate, e.dateOfBirth ?? '', e.workLocation ?? '',
+    ].map(escape).join(','))
+    const blob = new Blob([[header.join(','), ...rows].join('\n')], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const link = window.document.createElement('a')
+    link.href = url
+    link.download = 'employees.csv'
+    window.document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  }, [state.employees])
+
+  // -------- F5 Leave config + cancel + balance --------
+  const upsertLeaveType = useCallback((lt: Partial<LeaveType>) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      if (lt.id) {
+        next.leaveTypes = next.leaveTypes.map(x => x.id === lt.id ? { ...x, ...lt } as LeaveType : x)
+      } else {
+        next.leaveTypes = [...next.leaveTypes, {
+          id: createId('lt'), code: (lt.code || 'CUSTOM').toUpperCase(), name: lt.name || 'Custom',
+          annualEntitlementDays: lt.annualEntitlementDays ?? 0, isActive: lt.isActive ?? true,
+        }]
+      }
+      appendAudit(next, 'UPSERT_LEAVE_TYPE', 'LEAVE', `${lt.name || lt.code}`)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const upsertHoliday = useCallback((h: Partial<Holiday>) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      if (h.id) {
+        next.holidays = next.holidays.map(x => x.id === h.id ? { ...x, ...h } as Holiday : x)
+      } else {
+        next.holidays = [...next.holidays, {
+          id: createId('h'), date: h.date || new Date().toISOString().slice(0,10),
+          name: h.name || 'Holiday', recurring: h.recurring ?? false,
+        }]
+      }
+      appendAudit(next, 'UPSERT_HOLIDAY', 'LEAVE', `${h.name || h.date}`)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const cancelLeaveRequest = useCallback((id: string) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      next.leaveRequests = next.leaveRequests.map(l =>
+        l.id === id ? { ...l, status: 'rejected' as const } : l,
+      )
+      appendAudit(next, 'CANCEL_LEAVE', 'LEAVE', id)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const getLeaveBalance = useCallback((employeeId: string) => {
+    return state.leaveTypes.filter(t => t.isActive).map(leaveType => {
+      const requests = state.leaveRequests.filter(l => l.employeeId === employeeId && l.type === leaveType.code.toLowerCase() as any)
+      const used = requests.filter(r => r.status === 'approved').length
+      const pending = requests.filter(r => r.status === 'pending').length
+      return {
+        leaveType,
+        entitlement: leaveType.annualEntitlementDays,
+        used,
+        pending,
+        available: Math.max(0, leaveType.annualEntitlementDays - used - pending),
+      }
+    })
+  }, [state.leaveRequests, state.leaveTypes])
+
+  // -------- F4 Attendance --------
+  const todayKey = () => new Date().toISOString().slice(0, 10)
+
+  const getMyAttendanceState = useCallback((): { state: AttendanceState; record?: AttendanceRecord } => {
+    const user = getAuthUser()
+    if (!user) return { state: 'idle' as AttendanceState }
+    const record = state.attendance.find(r => r.employeeId === user.employeeId && r.date === todayKey())
+    if (!record) return { state: 'idle' as AttendanceState }
+    let s: AttendanceState = 'idle'
+    for (const e of record.events) {
+      if (e.type === 'clock_in') s = 'working'
+      else if (e.type === 'break_start' && s === 'working') s = 'on_break'
+      else if (e.type === 'break_end' && s === 'on_break') s = 'working'
+      else if (e.type === 'clock_out' && s === 'working') s = 'ended'
+    }
+    return { state: s, record }
+  }, [state.attendance])
+
+  const submitAttendanceAction = useCallback(async (action: 'clock_in' | 'break_start' | 'break_end' | 'clock_out') => {
+    const user = getAuthUser()
+    if (!user) return
+    const { state: currentState } = getMyAttendanceState()
+    const transitions: Record<AttendanceState, Partial<Record<typeof action, AttendanceState>>> = {
+      idle: { clock_in: 'working' },
+      working: { break_start: 'on_break', clock_out: 'ended' },
+      on_break: { break_end: 'working' },
+      ended: {},
+    }
+    if (!transitions[currentState][action]) {
+      throw new Error(`Cannot ${action} from ${currentState}`)
+    }
+    commit(previous => {
+      const next = structuredClone(previous)
+      const day = todayKey()
+      let record = next.attendance.find(r => r.employeeId === user.employeeId && r.date === day)
+      if (!record) {
+        record = { id: createId('rec'), employeeId: user.employeeId, date: day, workedMinutes: 0, breakMinutes: 0, status: 'open', events: [] }
+        next.attendance = [...next.attendance, record]
+      }
+      record.events = [...record.events, { id: createId('ev'), type: action, occurredAt: new Date().toISOString(), source: 'user' }]
+      // recompute
+      let workedMs = 0, breakMs = 0
+      let pairStart: number | null = null, breakStart: number | null = null
+      for (const e of record.events) {
+        const t = new Date(e.occurredAt).getTime()
+        if (e.type === 'clock_in') pairStart = t
+        else if (e.type === 'break_start' && pairStart !== null) { workedMs += t - pairStart; pairStart = null; breakStart = t }
+        else if (e.type === 'break_end' && breakStart !== null) { breakMs += t - breakStart; breakStart = null; pairStart = t }
+        else if (e.type === 'clock_out' && pairStart !== null) { workedMs += t - pairStart; pairStart = null }
+      }
+      record.workedMinutes = Math.floor(workedMs / 60000)
+      record.breakMinutes = Math.floor(breakMs / 60000)
+      record.status = record.events.some(e => e.type === 'clock_out') ? 'closed' : 'open'
+      next.attendance = next.attendance.map(r => r.id === record!.id ? record! : r)
+      appendAudit(next, 'ATTENDANCE_ACTION', 'ATTENDANCE', action)
+      return next
+    })
+  }, [appendAudit, commit, getMyAttendanceState])
+
+  const getTeamAttendance = useCallback(() => {
+    const user = getAuthUser()
+    if (!user) return []
+    const today = todayKey()
+    return state.employees
+      .filter(e => e.managerId === user.employeeId)
+      .map(e => {
+        const rec = state.attendance.find(r => r.employeeId === e.id && r.date === today)
+        let s: AttendanceState = 'idle'
+        if (rec) {
+          for (const ev of rec.events) {
+            if (ev.type === 'clock_in') s = 'working'
+            else if (ev.type === 'break_start') s = 'on_break'
+            else if (ev.type === 'break_end') s = 'working'
+            else if (ev.type === 'clock_out') s = 'ended'
+          }
+        }
+        return { employeeId: e.id, fullName: e.name, state: s, workedMinutes: rec?.workedMinutes ?? 0, breakMinutes: rec?.breakMinutes ?? 0 }
+      })
+  }, [state.attendance, state.employees])
+
+  // -------- F7 Ticket extras --------
+  const rateTicket = useCallback(async (id: string, rating: number, feedback?: string) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      next.tickets = next.tickets.map(t =>
+        t.id === id ? { ...t, resolutionRating: rating, resolutionFeedback: feedback } : t,
+      )
+      appendAudit(next, 'RATE_TICKET', 'TICKETS', `${id}:${rating}`)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const mergeTicket = useCallback(async (sourceId: string, targetId: string) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      next.tickets = next.tickets.map(t =>
+        t.id === sourceId ? { ...t, mergedIntoId: targetId, status: 'closed' as const, closedAt: new Date().toISOString() } : t,
+      )
+      appendAudit(next, 'MERGE_TICKET', 'TICKETS', `${sourceId} → ${targetId}`)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const setCommentInternal = useCallback((commentId: string, isInternal: boolean) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      next.tickets = next.tickets.map(t => ({
+        ...t,
+        comments: t.comments?.map(c => c.id === commentId ? { ...c, isInternal } : c),
+      }))
+      return next
+    })
+  }, [commit])
+
+  // -------- F8 Facility --------
+  const upsertFacilityLocation = useCallback((loc: Partial<FacilityLocation>) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      if (loc.id) {
+        next.facilityLocations = next.facilityLocations.map(x => x.id === loc.id ? { ...x, ...loc } as FacilityLocation : x)
+      } else {
+        next.facilityLocations = [...next.facilityLocations, {
+          id: createId('loc'), name: loc.name || 'New location', type: loc.type || 'office_area',
+          building: loc.building, floor: loc.floor, isActive: loc.isActive ?? true,
+        }]
+      }
+      return next
+    })
+  }, [commit])
+
+  const upsertFacilityAsset = useCallback((asset: Partial<FacilityAsset>) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      if (asset.id) {
+        next.facilityAssets = next.facilityAssets.map(x => x.id === asset.id ? { ...x, ...asset } as FacilityAsset : x)
+      } else {
+        next.facilityAssets = [...next.facilityAssets, {
+          id: createId('asset'), name: asset.name || 'Asset', type: asset.type, serialNumber: asset.serialNumber,
+          status: asset.status ?? 'active', locationId: asset.locationId || next.facilityLocations[0]?.id || '',
+        }]
+      }
+      return next
+    })
+  }, [commit])
+
+  const createFacilityRequest = useCallback(async (req: Partial<FacilityRequest>) => {
+    const user = getAuthUser()
+    commit(previous => {
+      const next = structuredClone(previous)
+      const created: FacilityRequest = {
+        id: createId('freq'),
+        title: req.title || 'Facility request',
+        description: req.description || '',
+        issueType: req.issueType || 'other',
+        urgency: req.urgency ?? 'normal',
+        status: 'open',
+        reporterEmployeeId: user?.employeeId || '',
+        locationId: req.locationId || next.facilityLocations[0]?.id || '',
+        assetId: req.assetId,
+        photos: req.photos ?? [],
+        createdAt: new Date().toISOString(),
+      }
+      next.facilityRequests = [created, ...next.facilityRequests]
+      appendAudit(next, 'CREATE_FACILITY_REQUEST', 'FACILITY', created.id)
+      return next
+    })
+  }, [appendAudit, commit])
+
+  const escalateFacilityToTicket = useCallback(async (id: string) => {
+    commit(previous => {
+      const next = structuredClone(previous)
+      const req = next.facilityRequests.find(r => r.id === id)
+      if (!req || req.ticketId) return previous
+      const ticket: Ticket = {
+        id: createId('tic'),
+        title: `[Facility] ${req.title}`,
+        description: req.description,
+        priority: req.urgency === 'critical' ? 'urgent' : req.urgency === 'high' ? 'high' : 'medium',
+        status: 'new',
+        employeeId: req.reporterEmployeeId,
+        createdAt: new Date().toISOString(),
+        location: next.facilityLocations.find(l => l.id === req.locationId)?.name,
+      }
+      next.tickets = [ticket, ...next.tickets]
+      next.facilityRequests = next.facilityRequests.map(r => r.id === id ? { ...r, ticketId: ticket.id } : r)
+      appendAudit(next, 'ESCALATE_FACILITY', 'FACILITY', id)
+      return next
+    })
+  }, [appendAudit, commit])
+
   useEffect(() => {
     setEmployeeDirectory(state.employees)
   }, [state.employees])
@@ -1258,6 +1709,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateRole,
     updateSettings,
     toggleOnboardingTask,
+    bulkActivateEmployees,
+    exportEmployeesCsv,
+    upsertLeaveType,
+    upsertHoliday,
+    cancelLeaveRequest,
+    getLeaveBalance,
+    getMyAttendanceState,
+    submitAttendanceAction,
+    getTeamAttendance,
+    rateTicket,
+    mergeTicket,
+    setCommentInternal,
+    upsertFacilityLocation,
+    upsertFacilityAsset,
+    createFacilityRequest,
+    escalateFacilityToTicket,
     isDemoMode: true,
   }), [
     state,
@@ -1294,6 +1761,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateRole,
     updateSettings,
     toggleOnboardingTask,
+    bulkActivateEmployees,
+    exportEmployeesCsv,
+    upsertLeaveType,
+    upsertHoliday,
+    cancelLeaveRequest,
+    getLeaveBalance,
+    getMyAttendanceState,
+    submitAttendanceAction,
+    getTeamAttendance,
+    rateTicket,
+    mergeTicket,
+    setCommentInternal,
+    upsertFacilityLocation,
+    upsertFacilityAsset,
+    createFacilityRequest,
+    escalateFacilityToTicket,
   ])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

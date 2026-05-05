@@ -31,4 +31,19 @@ export interface GraphqlConfig {
 export interface SecurityConfig {
   expiresIn: number;
   bcryptSaltOrRound: string | number;
+  password: PasswordPolicyConfig;
+  lockout: LockoutConfig;
+}
+
+export interface PasswordPolicyConfig {
+  minLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireDigit: boolean;
+  requireSymbol: boolean;
+}
+
+export interface LockoutConfig {
+  maxFailedAttempts: number;
+  lockoutMinutes: number;
 }

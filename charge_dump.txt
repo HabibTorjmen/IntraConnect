@@ -1,0 +1,637 @@
+
+INTRACONNECT
+Enterprise Intranet & Employee Management Platform
+
+Business Requirements Document (BRD) & Functional Specification (FSD)
+
+
+
+Document Control
+Revision History
+
+Document Purpose
+This document constitutes the official Business Requirements Document (BRD) and Functional Specification Document (FSD) for the IntraConnect Platform. It serves as the single source of truth for all stakeholders — Product, Engineering, QA, and Operations — and is the authoritative reference for development, testing, and acceptance.
+
+Audience
+Product Managers – for feature scope and acceptance validation
+Software Engineers – for implementation guidance and technical requirements
+QA Engineers – for test case design and acceptance criteria
+Project Managers – for scope management and delivery planning
+Operations & HR Administrators – for business process alignment
+
+Executive Summary
+IntraConnect is a modular, enterprise-grade intranet and employee management platform designed to centralize employee operations, digitize internal workflows, and provide real-time organizational visibility. The platform replaces fragmented tools and manual processes with a unified digital workspace tailored to small and medium-sized organizations.
+
+Strategic Objectives
+Digitize all HR and operational workflows — eliminating paper-based processes
+Provide a unified employee experience across departments and roles
+Enforce role-based access control (RBAC) across all platform modules
+Enable real-time decision-making through configurable dashboards
+Ensure full auditability and compliance at every operational touchpoint
+Build a scalable, modular architecture ready for future expansion
+
+Platform Modules Summary
+
+System Architecture & Scope
+High-Level Architecture
+The IntraConnect platform follows a layered architecture pattern with strict separation of concerns between presentation, business logic, and data layers.
+
+
+Scope Definition
+In Scope – Phase 1
+Employee lifecycle management (onboarding to offboarding)
+Role-based access control (RBAC) across all modules
+Leave request, approval, and balance tracking
+Help desk ticketing with SLA enforcement
+Facility issue reporting and maintenance tracking
+Document repository with versioning and access control
+Secure payslip distribution and payroll history
+Internal tools directory
+Digital time tracking and attendance management
+Role-based dashboards with configurable widgets
+Email and in-app notification system
+Cross-module reporting and audit logging
+
+Out of Scope – Phase 1
+Payroll calculation or salary processing engine
+Biometric attendance devices or geofencing
+Native mobile applications (iOS / Android)
+External SSO / Identity Provider integration (future-ready)
+AI-powered analytics or chatbot automation
+
+Roles & Access Control Model
+The IntraConnect platform operates on a strict Role-Based Access Control (RBAC) model. All permissions are enforced at the backend layer — frontend restrictions alone are insufficient and must not be relied upon for security.
+
+System Roles
+
+RBAC Enforcement Rules
+Every API endpoint must validate the requesting user's role and permissions before processing.
+Role assignments are managed exclusively by HR Admin or System Admin.
+Permission changes take effect immediately upon role update.
+Each employee must be assigned exactly one role at account creation.
+All access attempts — successful or failed — are logged for audit purposes.
+
+Module 4.1 – Employee Management
+
+Actors & Responsibilities
+
+User Stories
+HR Admin
+As an HR Admin, I want to create new employee profiles so that new hires can access the system.
+As an HR Admin, I want to update employee information so that records remain accurate and current.
+As an HR Admin, I want to deactivate employee accounts so that former employees cannot access the system.
+As an HR Admin, I want to perform bulk operations to manage multiple employees efficiently.
+As an HR Admin, I want to assign predefined roles to each employee to control system access.
+Employee
+As an employee, I want to securely log in for the first time using a one-time password to activate my account.
+As an employee, I want to be forced to change my password on first login so that my account is secure.
+
+Employee Profile – Required Fields
+
+Employee Profile – Optional Fields
+Emergency Contact: Name, Phone Number, Relationship
+Home Address
+Salary Grade (if applicable)
+Work Location
+Probation End Date
+Internal HR Notes / Comments
+
+Employee Onboarding & First Login Flow
+
+OTP Security Rules
+Single-use only — invalidated immediately after first use
+Time-limited — configurable expiry (default: 48 hours)
+Stored securely as hashed value — never plain text
+Deactivated employees cannot receive OTP reset emails
+Expired OTPs require HR Admin to regenerate manually
+
+Employee Operations
+Individual Operations
+Create new employee profile
+View employee profile (detailed view)
+Edit employee information (role-dependent permissions)
+Deactivate employee — soft delete: status set to Inactive, login access revoked, data retained
+Reactivate employee — access restored, optional OTP regeneration
+
+Bulk Operations
+Bulk create via CSV / Excel upload with validation and error reporting
+Bulk update: Department, Role, Employment Status
+Bulk activate / deactivate
+Bulk export: Excel / CSV
+
+Employee List View
+Paginated list with sorting
+Search by: Name, Email, Employee ID
+Filters: Department, Role, Employment Status, Contract Type
+
+Acceptance Criteria
+HR Admin can fully manage the employee lifecycle from creation to deactivation.
+Employees cannot access the system without completing the first-login password setup.
+OTP is secure, time-bound, and single-use — system prevents any reuse.
+Role-based permissions are enforced correctly at the backend.
+Deactivated employees are fully blocked from all system access.
+Bulk operations execute with full validation and error reporting per record.
+
+Module 4.2 – Role & Permission Management
+
+Core Concepts
+Each employee is assigned exactly one role.
+Each role has a defined set of module-level permissions.
+Permissions define: Read, Write, Update, Delete access per module.
+Role changes take effect immediately across all active sessions.
+Backend enforcement is mandatory — not UI-layer only.
+
+Permission Matrix (Sample)
+
+Acceptance Criteria
+Admin can create, edit, and deactivate roles.
+Permission changes propagate immediately across the platform.
+Employees cannot access modules or actions beyond their role permissions.
+All permission enforcement is validated at the API/backend level.
+
+Module 4.3 – Leave Management
+
+Actors & Responsibilities
+
+Leave Types Configuration
+HR Admin can configure the following leave types (minimum 10 supported):
+Annual Leave
+Sick Leave
+Emergency Leave
+Unpaid Leave
+Maternity / Paternity Leave
+Bereavement Leave
+Custom Leave Types (user-defined)
+
+Each leave type is configured with:
+
+Leave Policy Configuration
+Annual entitlement (days per year per leave type)
+Accrual method: Annual grant or monthly accrual
+Carry-forward rules: allowed / not allowed, maximum carry-forward days, expiry date
+Minimum and maximum days per request
+Advance notice requirement (number of days before leave start)
+Black-out periods (date ranges where leave is restricted)
+Public holiday calendar integration (weekends/holidays excluded from day count)
+Weekend definition: configurable (e.g., Fri/Sat or Sat/Sun)
+
+Leave Request Submission Flow
+
+Approval Workflow
+Default flow: Employee → Direct Manager → (Optional HR Admin override)
+
+
+Leave Balance Management
+Employees can view:
+Available balance per leave type
+Used leave (current year)
+Pending leave (awaiting approval)
+Carry-forward balance
+Full leave history (approved, rejected, cancelled)
+
+Leave Cancellation Rules
+Employees may cancel pending or approved leave requests.
+Approved leave cancellation may require manager approval (policy-configurable).
+Modified requests restart the full approval workflow.
+
+Team & Organization Calendar
+Month and week views with color-coding by leave type
+Managers see team-only calendar; HR Admin sees organization-wide view
+Filters: Department, Employee, Leave Type
+Export to PDF and Excel
+
+Acceptance Criteria
+Employees can submit leave requests without paper or manual intervention.
+Leave balances update instantly upon approval.
+System prevents negative balances unless explicitly configured to allow it.
+Overlapping leave is flagged and visible before submission and approval.
+Weekends and public holidays are automatically excluded from day calculations.
+System supports a minimum of 10 configurable leave types.
+Role-based access is strictly enforced throughout the module.
+
+Module 4.4 – Help Desk (Ticketing System)
+
+Actors & Responsibilities
+
+Ticket Categories
+Predefined categories (Admin can manage):
+
+Ticket Lifecycle – Status Workflow
+
+Priority Levels & SLA
+
+Ticket Submission – Employee
+Select category (mandatory)
+Enter subject / title (mandatory)
+Provide detailed description (mandatory)
+Select priority: Low, Medium, High, Urgent
+Attach supporting files: up to 5 files, max 10MB total — PDF, DOC, XLSX, PNG, JPG
+System auto-generates unique Ticket ID and sets status to 'New'
+Employee receives submission confirmation notification
+
+Ticket Management – Agent / Admin
+View dashboard with filters: Status, Category, Priority, Assigned Agent, Date Range
+Assign or reassign tickets to agents or departments
+Change priority level (with audit trail entry)
+Add internal notes (agent/admin only — not visible to employee)
+Add public comments (visible to employee)
+Attach resolution files or documents
+Merge duplicate tickets (admin only)
+Change ticket status throughout lifecycle
+
+SLA Enforcement & Escalation
+SLA timer starts at ticket creation.
+SLA timer pauses when status is 'Pending Employee'.
+SLA breach triggers: visual warning in dashboard, email to admin, optional auto-escalation.
+Escalation options: reassign to senior agent, notify department manager, auto-increase priority.
+
+Resolution Feedback
+After ticket closure, employee is prompted for a 1–5 star rating with optional comment.
+Rating is immutable once submitted.
+Ratings feed into agent performance reports.
+
+Acceptance Criteria
+Employees can submit and track tickets in under 1 minute.
+Agents are notified of new assignments within 2 minutes.
+SLA breaches are detected and escalated automatically.
+Ticket history and audit logs are immutable and permanently preserved.
+Managers have full visibility into team support workload.
+System handles high ticket volume without performance degradation.
+
+Module 4.5 – Facility Management
+
+Facility Locations & Asset Registry
+Admin configures facility locations:
+Location types: Office area, Meeting room, Restroom, Common area, Parking, Cafeteria, Storage, Equipment room
+Each location: name, type, floor/building, department association, Active/Inactive status
+Inactive locations cannot receive new issue reports
+
+Optional asset registry per location:
+Asset ID (auto-generated), name, type, location, serial number, purchase date, status
+Asset status: Active | Under Maintenance | Retired
+Assets can be referenced during issue reporting
+
+Issue Types
+
+Maintenance Request Lifecycle
+
+Urgency & SLA
+
+Help Desk Integration
+Facility requests can be escalated to Help Desk tickets.
+Linked ticket IDs maintained between both modules.
+Closing the Help Desk ticket can optionally close the facility request (configurable).
+Shared audit trail reference maintained across both modules.
+
+Acceptance Criteria
+Employees can report facility issues from any device in under 2 minutes.
+Photo uploads (up to 3 images, 5MB each) are supported.
+Critical issues trigger immediate admin notifications.
+Requests are fully traceable from creation to completion.
+Help Desk escalation integration works seamlessly.
+
+Module 4.7 – Document Management
+
+Document Categories
+Company Documents
+Policies & Procedures
+Employee Handbook
+Safety Guidelines
+Quality Standards
+Forms & Templates
+Training Materials
+Company Announcements
+Certificates & Licenses
+Employee Documents
+Employment Contracts
+ID Documents
+Educational Certificates
+Medical Records
+Performance Reviews
+Disciplinary Records
+
+Document Upload & Publishing
+HR Admin uploads documents with the following metadata:
+
+Access Control Model
+
+Document Versioning
+Every document upload creates a new version — previous versions are preserved.
+Version number increments automatically on each upload.
+HR Admin can view full version history and restore previous versions.
+Employees always access the latest published version.
+Deleted documents are soft-deleted by default; permanent deletion is Admin-only.
+
+Employee Personal Documents
+Employees can upload documents to their own profile (within employee document categories).
+Employees can view and download only their own personal documents.
+HR Admin can view and download all employee personal documents.
+Employees cannot delete documents uploaded by HR.
+
+Document Expiry & Lifecycle
+HR Admin notified before document expiry (configurable number of days).
+Expired documents are automatically hidden from employees but remain accessible to HR/Admin.
+Documents can be republished or updated after expiry.
+
+Bulk Operations
+Bulk upload via ZIP file — automatic extraction with per-file validation.
+Error reporting for failed files — successful files proceed independently.
+Admin bulk actions: Archive, Delete, Permission update.
+
+Acceptance Criteria
+File uploads up to 25MB complete reliably for all supported formats.
+Document preview works for PDFs and image files.
+Search results return in under 2 seconds.
+Access permissions are strictly enforced — employees cannot access unauthorized documents.
+Download and access history is fully auditable.
+Bulk ZIP upload handles extraction, validation, and error reporting correctly.
+
+Module 4.8 – Payroll Management (Payslip Distribution)
+
+Explicit Scope Boundary
+
+Payslip Upload Methods
+Individual Upload
+HR selects employee, selects pay period (Month/Year), uploads PDF.
+System validates: PDF format, employee existence, no duplicate for same period.
+Bulk Upload
+ZIP file containing one PDF per employee.
+Employee matching: by Employee ID (preferred) or Email (fallback).
+Failed matches are flagged with error details — not exposed to any employee.
+Upload summary provided: successful, failed, duplicate detections.
+Supports minimum 500 payslips per bulk upload session.
+
+Payslip Lifecycle
+
+Security & Access Isolation (Critical)
+
+Notifications
+Employee: Email notification when new payslip is published — contains secure link to portal (no attachment).
+HR/Admin: Bulk upload success/failure summary — unmatched employee alerts.
+
+Audit & Compliance Logging
+All of the following events are logged with: User, Action, Payslip ID, Timestamp, IP/Device:
+Upload, Publish, View, Download, Delete, Failed access attempts
+Audit logs are immutable — no modification or deletion permitted.
+Retention period configurable by Admin (default: 7 years for compliance).
+
+Acceptance Criteria
+Employees can access only their own payslips — ownership enforced at API level.
+Payslip access requires re-authentication (password or OTP).
+Bulk upload processes 500+ payslips with full validation and error reporting.
+All access events are logged and auditable.
+Payroll data is encrypted at rest and in transit.
+No payslip file is ever sent as an email attachment.
+Payslip downloads complete in under 5 seconds.
+
+Module 4.11 – Tools Directory Management
+
+Business Value
+Improves employee awareness of available internal systems
+Reduces onboarding friction — new hires find tools on day one
+Centralizes access instructions — reduces IT support overhead
+Supports role-based tool visibility for relevant systems only
+
+Tool Record Structure
+
+Admin Capabilities
+Create, edit, and delete tool entries
+Activate or deactivate tools without deletion
+Set role or department-based visibility per tool
+Reorder tools by drag-and-drop or priority number
+Platform supports minimum 30 tool entries
+
+Employee View
+Browse all tools accessible to their role
+Search by name or description
+Filter by category
+Click external links — open in new tab (never redirect within app)
+View access instructions before requesting access
+
+Future Enhancements (Optional)
+Tool usage tracking and popularity analytics
+Employee favorites / bookmarked tools
+Recently accessed tools widget on dashboard
+Access request workflow for restricted tools
+
+Acceptance Criteria
+Admin can create and manage a minimum of 30 tools.
+External links open in a new browser tab.
+Search returns results in under 300ms.
+Role-based visibility is enforced at the backend — not UI-layer only.
+Mobile-responsive display across all screen sizes.
+
+Module 4.12 – Time Tracking & Attendance Management
+
+Core Concept
+Each employee interacts with an attendance widget to record their working session in real time. The system tracks all time events, calculates worked hours, enforces policy, and provides reporting for managers and HR.
+
+Employee Attendance Actions & State Machine
+
+Real-Time Timer Display
+The employee attendance panel must display:
+
+Attendance Policy Configuration (HR Admin)
+HR Admin configures company-wide and role-specific policies:
+Standard working hours per day
+Standard working days per week
+Minimum required break duration
+Maximum allowed break duration
+Break required after X hours worked
+Grace period for late arrival (minutes)
+Earliest allowed clock-in time
+Latest expected clock-in time
+Overtime threshold and tracking mode (allowed / tracked only)
+Maximum number of breaks per day
+Auto-close day at end of business hours if employee forgets to clock out
+Policy assignment: by role, contract type, department, or location
+
+Daily Record Calculation
+
+Attendance Statuses
+Each attendance record carries one or more derived status flags:
+
+Manual Correction & Exception Handling
+HR Admin can: add missing clock-in/out, edit break times, correct worked duration.
+Every manual adjustment requires a mandatory reason/comment.
+Adjustment logs store: old value, new value, reason, adjusted by, timestamp.
+All corrections are auditable — original data is never silently overwritten.
+
+Manager View
+Live team attendance status: who is working, on break, or absent
+Late arrivals and missing clock-outs highlighted
+Daily and weekly attendance summaries for direct reports
+Managers can flag records but cannot modify unless explicitly granted permission
+
+Notifications & Reminders
+Employee: reminder if not clocked in by expected time
+Employee: alert if break exceeds configured threshold
+Employee: reminder to clock out at end of day
+Manager/HR: alert for missing clock-outs, excessive breaks, repeated anomalies
+
+Future Integration Readiness
+Leave Management: approved leave adjusts attendance expectations automatically
+Payroll: overtime totals ready for future payroll processing integration
+Shift Scheduling: designed to extend to shift-based attendance models
+Reporting / BI: attendance data exposed to analytics layer
+
+UX / UI Expectations
+One primary action button reflecting current state (Start Work / Start Break / End Break / End Work)
+Live timer displayed prominently — updates every second
+Today's event timeline: clock-in, breaks, clock-out with timestamps
+Daily summary card with worked hours, break time, status
+Weekly summary preview on the main attendance view
+Mobile-first design — full functionality on all screen sizes
+
+Acceptance Criteria
+Employee can clock in, take breaks, and clock out from desktop and mobile.
+Net worked time is calculated automatically and accurately.
+Invalid action sequences are prevented with clear user feedback.
+Company attendance policies can be fully configured by HR Admin.
+Managers can monitor direct-report attendance in real time.
+HR can adjust records with full immutable audit trail.
+Reports can be generated and exported in Excel and CSV.
+Employees can only access their own attendance records.
+
+Module 4.13 – Dashboard
+
+Design Principles
+Highly visual: charts, KPIs, and data summaries — not text-heavy
+Role-aware: strict data visibility — each role sees only their authorized data
+Configurable: Admin controls widget availability and default layout per role
+Fast: dashboard loads in under 2 seconds — lazy loading for widgets
+Mobile-first: fully responsive grid layout across all screen sizes
+Modular: widget system allows future extension without redesign
+
+Widget-Based Architecture
+The dashboard is built on a widget system where each widget is an independent, configurable card. Widgets are:
+
+Dashboard Configuration (Admin)
+Admin selects which widgets are available per role (Employee, Manager, Admin).
+Maximum widgets per dashboard: configurable (default: 5).
+Admin defines default widget layout and order.
+Individual users can reorder widgets within their allowed set.
+User preferences are saved per account.
+
+Employee Dashboard Widgets
+
+Manager Dashboard Widgets
+
+Admin Dashboard Widgets
+
+Chart Requirements
+Every module contributes at least one chart or KPI to the dashboard.
+All charts support: tooltips on hover, legends, responsive resizing.
+Chart types available: Line, Bar, Pie, Area, KPI card, Status grid.
+Charts fetch data from dedicated aggregation API endpoints (not raw module APIs).
+
+Performance Requirements
+Dashboard initial load: under 2 seconds.
+Widget data refresh: configurable auto-refresh interval or on page load.
+API aggregation layer used to minimize the number of requests per dashboard load.
+Skeleton loaders displayed while widget data is fetching.
+
+Acceptance Criteria
+Dashboard loads in under 2 seconds on standard connections.
+Users see only role-appropriate data — enforced at API level.
+Widgets are configurable and reorderable by Admin.
+Minimum 5 simultaneous widgets supported without performance impact.
+All charts render correctly and responsively on desktop and mobile.
+Every module contributes at least one visible widget.
+System handles peak concurrent users without degradation.
+
+Cross-Module: Notification System
+
+Notification Channels
+Email (mandatory for all critical notifications)
+In-app notifications (bell icon with unread count)
+
+Notification Events by Module
+
+Notification Rules
+Deactivated employees do not receive any notifications.
+Notifications are role-aware — users only receive relevant alerts.
+All sent notifications are logged with delivery status.
+Critical notifications (SLA breach, safety issues) cannot be disabled.
+
+Security, Audit & Compliance
+Security Principles
+All API endpoints validate role and permission before processing any request.
+Sensitive data (passwords, payslips, medical records) encrypted at rest and in transit.
+Time-limited signed URLs for secure file downloads.
+Re-authentication required before accessing payroll documents.
+Password policy enforced: minimum length, complexity, no OTP reuse.
+Account lockout after configurable failed login attempts.
+
+Audit Logging
+The following are logged with: Actor, Timestamp, Action, Resource ID, Old Value (if applicable), New Value (if applicable):
+
+Compliance Rules
+All audit logs are immutable — no modification or deletion by any user role.
+Payroll data retention: minimum 7–10 years (configurable by Admin).
+GDPR-ready: employee data deletion requests handled via Admin with audit trail.
+
+Non-Functional Requirements
+Performance
+
+Scalability
+Modular architecture — new modules can be added without platform redesign.
+Designed for 50–1,000+ employees without performance degradation.
+Database indexing on all frequently queried fields.
+File storage scalable via cloud object storage (S3-compatible).
+
+Availability & Reliability
+Target availability: 99.5% uptime during business hours.
+Graceful degradation: individual module failures do not crash the platform.
+Database backups: automated daily with point-in-time recovery.
+
+Security
+HTTPS enforced across all endpoints.
+JWT-based authentication with configurable token expiry.
+All sensitive fields encrypted at rest.
+Input validation and sanitization on all API endpoints.
+
+Usability
+Mobile-responsive design for all modules — no separate mobile app required.
+Web Content Accessibility Guidelines (WCAG 2.1 AA) compliance target.
+Maximum 3 clicks to reach any primary action from the dashboard.
+All forms include inline validation with clear error messaging.
+
+Platform-Level Acceptance Criteria
+The following criteria must be satisfied before the IntraConnect platform is considered ready for production release:
+
+Authentication & Security
+Employees cannot access any module without completing first-login OTP setup.
+All RBAC rules are enforced at the API level — frontend-only restrictions are insufficient.
+Deactivated employees are completely blocked from all platform access.
+
+Data Integrity
+All employee, leave, payroll, and audit data is preserved on deactivation (soft delete).
+Email addresses and Employee IDs are unique across the system at all times.
+Manual adjustments (attendance, payroll) are fully traceable with immutable audit logs.
+
+Workflow Correctness
+Leave approval workflows route correctly through the defined actor chain.
+SLA timers start, pause, and escalate correctly across all priority levels.
+Attendance state machine prevents all invalid action sequences.
+
+Performance
+Dashboard loads in under 2 seconds under normal load conditions.
+All API responses return within 500ms for standard operations.
+Bulk operations (payslips, employee import) complete without timeout for 500+ records.
+
+Notifications
+All defined notification events trigger correctly within the specified time window.
+Employees receive payslip notifications with secure links — no file attachments.
+SLA breach notifications reach admin and manager within the defined escalation window.
+
+User Experience
+All forms are mobile-responsive and usable on standard smartphone screens.
+Quick actions are accessible within 3 clicks from the dashboard.
+Error messages are clear, specific, and actionable — no generic error screens.
+
+Future Enhancements – Phase 2
+The following capabilities are out of scope for Phase 1 but are architecturally anticipated and should not be blocked by Phase 1 implementation decisions:
+
+
+Glossary
