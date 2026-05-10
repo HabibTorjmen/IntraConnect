@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { AttendanceAction, deriveState, nextState } from './state-machine';
 
 function toDateOnly(d: Date): Date {
@@ -8,9 +9,50 @@ function toDateOnly(d: Date): Date {
   return out;
 }
 
+function parseHHmm(s: string | null | undefined): { h: number; m: number } | null {
+  if (!s) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return null;
+  return { h: parseInt(m[1], 10), m: parseInt(m[2], 10) };
+}
+
 @Injectable()
 export class AttendanceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationService,
+  ) {}
+
+  /**
+   * charge.docx §4.12 — pick the most-specific applicable policy for an employee.
+   * Order: location → department → role → default.
+   */
+  async resolvePolicyForEmployee(employeeId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { user: { include: { roles: true } } },
+    });
+    if (!employee) return this.prisma.attendancePolicy.findFirst({ where: { scope: 'default' } });
+    const policies = await this.prisma.attendancePolicy.findMany();
+    if (employee.workLocation) {
+      const p = policies.find(
+        (x) => x.scope === 'location' && x.scopeValue === employee.workLocation,
+      );
+      if (p) return p;
+    }
+    if (employee.departmentId) {
+      const p = policies.find(
+        (x) => x.scope === 'department' && x.scopeValue === employee.departmentId,
+      );
+      if (p) return p;
+    }
+    const roleCodes = employee.user?.roles.map((r) => r.code) ?? [];
+    for (const code of roleCodes) {
+      const p = policies.find((x) => x.scope === 'role' && x.scopeValue === code);
+      if (p) return p;
+    }
+    return policies.find((x) => x.scope === 'default') ?? null;
+  }
 
   async listPolicies() {
     return this.prisma.attendancePolicy.findMany({ orderBy: { name: 'asc' } });
@@ -173,5 +215,154 @@ export class AttendanceService {
       [r.date.toISOString().slice(0, 10), r.workedMinutes, r.breakMinutes, r.status].join(','),
     );
     return [header.join(','), ...rows].join('\n');
+  }
+
+  /**
+   * charge.docx §4.12 — mark today's record as on_leave for any employee
+   * with an APPROVED leave covering today.
+   */
+  async syncOnLeaveForToday() {
+    const today = toDateOnly(new Date());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const onLeaveToday = await this.prisma.leaveRequest.findMany({
+      where: {
+        status: 'APPROVED',
+        startDate: { lte: tomorrow },
+        endDate: { gte: today },
+      },
+      select: { employeeId: true },
+    });
+    if (!onLeaveToday.length) return { marked: 0 };
+    const employeeIds = Array.from(new Set(onLeaveToday.map((l) => l.employeeId)));
+    let marked = 0;
+    for (const employeeId of employeeIds) {
+      const rec = await this.getOrCreateRecord(employeeId, today);
+      if (rec.status !== 'on_leave') {
+        await this.prisma.attendanceRecord.update({
+          where: { id: rec.id },
+          data: { status: 'on_leave' },
+        });
+        marked++;
+      }
+    }
+    return { marked };
+  }
+
+  /**
+   * charge.docx §4.12 — Employee reminder if not clocked in by expected time.
+   * Skips employees on approved leave and inactive employees.
+   */
+  async sendClockInReminders() {
+    const today = toDateOnly(new Date());
+    const now = new Date();
+    const employees = await this.prisma.employee.findMany({
+      where: { status: 'active', userId: { not: null } },
+      select: { id: true, userId: true, fullName: true },
+    });
+    let sent = 0;
+    for (const emp of employees) {
+      const policy = await this.resolvePolicyForEmployee(emp.id);
+      if (!policy?.latestExpectedClockIn) continue;
+      const cutoff = parseHHmm(policy.latestExpectedClockIn);
+      if (!cutoff) continue;
+      const cutoffDate = new Date(today);
+      cutoffDate.setHours(cutoff.h, cutoff.m, 0, 0);
+      if (now < cutoffDate) continue;
+      const rec = await this.prisma.attendanceRecord.findUnique({
+        where: { employeeId_date: { employeeId: emp.id, date: today } },
+        include: { events: true },
+      });
+      if (rec?.status === 'on_leave') continue;
+      const hasClockIn = rec?.events.some((e) => e.type === 'clock_in');
+      if (hasClockIn) continue;
+      // Avoid duplicate reminders: check for an existing in-app reminder today.
+      const already = await this.prisma.notification.findFirst({
+        where: {
+          userId: emp.userId!,
+          type: 'attendance.reminder',
+          createdAt: { gte: today },
+        },
+      });
+      if (already) continue;
+      await this.notifications.dispatch({
+        userId: emp.userId!,
+        subject: 'Attendance reminder',
+        message: `You haven\'t clocked in yet today. Expected by ${policy.latestExpectedClockIn}.`,
+        type: 'attendance.reminder',
+        channel: 'in_app',
+      });
+      sent++;
+    }
+    return { sent };
+  }
+
+  /**
+   * charge.docx §4.12 — Auto-close days at end of business hours.
+   * Inserts an auto_close event and marks record closed.
+   */
+  async autoCloseDay() {
+    const today = toDateOnly(new Date());
+    const now = new Date();
+    const open = await this.prisma.attendanceRecord.findMany({
+      where: { date: today, status: { in: ['open', 'flagged'] } },
+      include: { events: true },
+    });
+    let closed = 0;
+    for (const rec of open) {
+      const policy = await this.resolvePolicyForEmployee(rec.employeeId);
+      const closeAt = parseHHmm(policy?.autoCloseAt ?? null);
+      if (!closeAt) continue;
+      const closeAtDate = new Date(today);
+      closeAtDate.setHours(closeAt.h, closeAt.m, 0, 0);
+      if (now < closeAtDate) continue;
+      const hasClockOut = rec.events.some((e) => e.type === 'clock_out');
+      if (hasClockOut) continue;
+      await this.prisma.attendanceEvent.create({
+        data: {
+          type: 'auto_close',
+          source: 'auto',
+          reason: 'auto-closed at end of business hours',
+          employeeId: rec.employeeId,
+          recordId: rec.id,
+          occurredAt: closeAtDate,
+        },
+      });
+      const events = await this.prisma.attendanceEvent.findMany({
+        where: { recordId: rec.id },
+        orderBy: { occurredAt: 'asc' },
+      });
+      await this.recompute(rec.id, events);
+      const flags: string[] = ['missing_clock_out'];
+      await this.prisma.attendanceRecord.update({
+        where: { id: rec.id },
+        data: { status: 'closed', flags },
+      });
+      // Notify the employee + their manager.
+      const emp = await this.prisma.employee.findUnique({
+        where: { id: rec.employeeId },
+        include: { manager: true },
+      });
+      if (emp?.userId) {
+        await this.notifications.dispatch({
+          userId: emp.userId,
+          subject: 'Day auto-closed',
+          message: `You did not clock out today. Your day was auto-closed at ${policy!.autoCloseAt}.`,
+          type: 'attendance.auto_close',
+          channel: 'in_app',
+        });
+      }
+      if (emp?.manager?.userId) {
+        await this.notifications.dispatch({
+          userId: emp.manager.userId,
+          subject: `Anomaly: missing clock-out — ${emp.fullName}`,
+          message: `${emp.fullName} did not clock out today. Day auto-closed.`,
+          type: 'attendance.anomaly',
+          channel: 'in_app',
+        });
+      }
+      closed++;
+    }
+    return { closed };
   }
 }

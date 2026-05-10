@@ -149,7 +149,14 @@ model LeaveRequest {
   leaveTypeId String?
   leaveType   LeaveType? @relation(fields: [leaveTypeId], references: [id])
 
-  approvedById String?
+  // charge.docx §4.3 — approval workflow tracking
+  approvedById       String?
+  managerApprovalAt  DateTime?
+  rejectionReason    String?
+  decidedAt          DateTime?
+
+  @@index([employeeId, status])
+  @@index([startDate, endDate])
 }
 
 model LeaveType {
@@ -256,13 +263,19 @@ model Notification {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  action    String
-  module    String?
-  details   String?  // JSON string or long text
-  createdAt DateTime @default(now())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  id         String   @id @default(uuid())
+  action     String
+  module     String?
+  resourceId String?
+  details    String?  // JSON string or long text
+  oldValue   String?  // JSON-serialized prior state
+  newValue   String?  // JSON-serialized new state
+  createdAt  DateTime @default(now())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([module, resourceId])
+  @@index([userId, createdAt])
 }
 
 model Document {
@@ -279,6 +292,9 @@ model Document {
   parentId    String?  // For versioning
   isPublic    Boolean  @default(false)
   expiresAt   DateTime?
+  // charge.docx §Security & Compliance — legal retention (e.g., 7 y for payroll).
+  retentionUntil    DateTime?
+  expiryNotifiedAt  DateTime?
   publishedAt DateTime?
   isDeleted   Boolean  @default(false)
   deletedAt   DateTime?
@@ -289,6 +305,9 @@ model Document {
   employee    Employee @relation(fields: [employeeId], references: [id])
 
   accessLogs  DocumentAccessLog[]
+
+  @@index([type, category])
+  @@index([expiresAt])
 }
 
 model DocumentAccessLog {
@@ -337,6 +356,7 @@ model Ticket {
 
   assignedToId String?
   assignedTo   Employee?       @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  assignedAt   DateTime?
 
   location     String?
 

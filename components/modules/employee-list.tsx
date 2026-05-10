@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Edit, Trash2, Search, FileUp, Users, History, Download, CheckCircle2, XCircle } from 'lucide-react'
+import { Edit, Trash2, Search, FileUp, Users, History, Download, CheckCircle2, XCircle, UserPlus } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AuthContext } from '@/context/auth-context'
 import AuditLogList from './audit-log-list'
 
 interface EmployeeListProps {
   onEditEmployee: (id: string) => void
+  onAddEmployee: () => void
 }
 
 interface ImportError {
@@ -48,7 +49,7 @@ function parseCsv(text: string): { rows: Record<string, string>[]; headers: stri
   return { rows, headers }
 }
 
-export default function EmployeeList({ onEditEmployee }: EmployeeListProps) {
+export default function EmployeeList({ onEditEmployee, onAddEmployee }: EmployeeListProps) {
   const {
     employees, deleteEmployee, advancedSearch, addBulkEmployees, isLoading,
     bulkActivateEmployees, exportEmployeesCsv,
@@ -172,6 +173,12 @@ export default function EmployeeList({ onEditEmployee }: EmployeeListProps) {
           <p className="text-slate-600 mt-1">Manage all employees and perform bulk operations</p>
         </div>
         <div className="flex gap-2">
+          {user?.role === 'admin' && (
+            <Button onClick={onAddEmployee} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              <UserPlus size={18} />
+              Add Employee
+            </Button>
+          )}
           {user?.role === 'admin' && (
             <Button
               onClick={() => setShowAuditTrail(!showAuditTrail)}

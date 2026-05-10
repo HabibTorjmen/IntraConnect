@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { TicketService } from '../ticket/ticket.service';
+import { NotificationService } from '../notification/notification.service';
 
 const PHOTO_MAX = 3;
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -13,7 +14,27 @@ export class FacilityService {
     private prisma: PrismaService,
     private storage: StorageService,
     private tickets: TicketService,
+    private notifications: NotificationService,
   ) {}
+
+  private async notifyAdminsCritical(subject: string, message: string) {
+    const admins = await this.prisma.user.findMany({
+      where: { isActive: true, roles: { some: { code: 'admin' } } },
+      select: { id: true },
+    });
+    await Promise.all(
+      admins.map((a) =>
+        this.notifications.dispatch({
+          userId: a.id,
+          subject,
+          message,
+          type: 'facility.critical',
+          critical: true,
+          channel: 'both',
+        }),
+      ),
+    );
+  }
 
   // ---- Locations ----
   listLocations(activeOnly = true) {
@@ -86,7 +107,17 @@ export class FacilityService {
     if (!location || !location.isActive) {
       throw new BadRequestException('Location is inactive or missing.');
     }
-    return this.prisma.facilityRequest.create({ data: data as any });
+    const created = await this.prisma.facilityRequest.create({ data: data as any });
+    // charge §4.5: critical facility issues trigger immediate admin notification.
+    if (created.urgency === 'critical') {
+      await this.notifyAdminsCritical(
+        `Critical facility issue: ${created.title}`,
+        `A critical facility issue was reported at ${location.name}${
+          location.building ? ` (${location.building})` : ''
+        }. Issue type: ${created.issueType}.`,
+      );
+    }
+    return created;
   }
 
   listRequests(filters: { status?: string; urgency?: string; locationId?: string } = {}) {
@@ -107,7 +138,22 @@ export class FacilityService {
   }
 
   async updateRequest(id: string, data: { status?: string; urgency?: string }) {
-    return this.prisma.facilityRequest.update({ where: { id }, data });
+    const before = await this.prisma.facilityRequest.findUnique({
+      where: { id },
+      include: { location: true },
+    });
+    if (!before) throw new NotFoundException('Facility request not found');
+    const updated = await this.prisma.facilityRequest.update({ where: { id }, data });
+    if (
+      data.urgency === 'critical' &&
+      before.urgency !== 'critical'
+    ) {
+      await this.notifyAdminsCritical(
+        `Facility request escalated to critical: ${updated.title}`,
+        `Request at ${before.location.name} was escalated to critical urgency.`,
+      );
+    }
+    return updated;
   }
 
   async addPhoto(requestId: string, file: Express.Multer.File) {

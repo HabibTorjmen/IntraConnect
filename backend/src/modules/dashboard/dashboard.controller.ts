@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/auth.jwt.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -61,16 +61,37 @@ export class DashboardController {
     return this.dashboardService.listWidgets(role);
   }
 
+  // Admin: list every widget (including inactive) for config UI.
+  @Get('widgets/all')
+  @CheckPermissions({ module: 'settings', action: 'manage' })
+  listAllWidgets() {
+    return this.dashboardService.listAllWidgets();
+  }
+
   @Post('widgets')
   @CheckPermissions({ module: 'settings', action: 'manage' })
   upsertWidget(@Body() data: any) {
     return this.dashboardService.upsertWidget(data);
   }
 
+  @Delete('widgets/:id')
+  @CheckPermissions({ module: 'settings', action: 'manage' })
+  deactivateWidget(@Param('id') id: string) {
+    return this.dashboardService.deactivateWidget(id);
+  }
+
   @Get('layout')
   @CheckPermissions({ module: 'dashboard', action: 'read' })
   myLayout(@AuthUser() user: any) {
     return this.dashboardService.getMyLayout(user.id);
+  }
+
+  // Composite "what should I render now" layout — handles defaults + saved order.
+  @Get('layout/effective')
+  @CheckPermissions({ module: 'dashboard', action: 'read' })
+  effectiveLayout(@AuthUser() user: any) {
+    const role = user.roles?.[0]?.code ?? 'employee';
+    return this.dashboardService.effectiveLayout(user.id, role);
   }
 
   @Post('layout')

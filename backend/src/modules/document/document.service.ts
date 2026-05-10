@@ -4,6 +4,7 @@ import * as unzipper from 'unzipper';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationService } from '../notification/notification.service';
 import { validateCategory, DocumentType } from './document.constants';
 
 interface UploadInput {
@@ -14,6 +15,7 @@ interface UploadInput {
   employeeId: string;
   isPublic?: boolean;
   expiresAt?: string;
+  retentionUntil?: string;
 }
 
 @Injectable()
@@ -21,6 +23,7 @@ export class DocumentService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    private notifications: NotificationService,
   ) {}
 
   async uploadDocument(file: Express.Multer.File, data: UploadInput): Promise<Document> {
@@ -43,8 +46,97 @@ export class DocumentService {
         isPublic: data.isPublic ?? false,
         publishedAt: new Date(),
         expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        retentionUntil: data.retentionUntil ? new Date(data.retentionUntil) : null,
       },
     });
+  }
+
+  /**
+   * charge.docx §4.7 — search by title, description, filename, category.
+   * Targets <2 s response: indexed columns, latest+non-deleted only.
+   */
+  async search(opts: {
+    q?: string;
+    type?: string;
+    category?: string;
+    skip?: number;
+    take?: number;
+  }) {
+    const term = (opts.q ?? '').trim();
+    const where: Prisma.DocumentWhereInput = {
+      isLatest: true,
+      isDeleted: false,
+      ...(opts.type ? { type: opts.type } : {}),
+      ...(opts.category ? { category: opts.category } : {}),
+    };
+    if (term.length > 0) {
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } },
+        { filename: { contains: term, mode: 'insensitive' } },
+        { category: { contains: term, mode: 'insensitive' } },
+      ];
+    }
+    return this.prisma.document.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: opts.take ?? 50,
+      skip: opts.skip ?? 0,
+      include: { employee: { select: { fullName: true } } },
+    });
+  }
+
+  /**
+   * charge.docx §4.7 — bulk permission update (e.g., make a set of documents public/private).
+   */
+  async bulkUpdateVisibility(ids: string[], isPublic: boolean) {
+    if (!ids.length) return { updated: 0 };
+    const result = await this.prisma.document.updateMany({
+      where: { id: { in: ids } },
+      data: { isPublic },
+    });
+    return { updated: result.count };
+  }
+
+  /**
+   * charge.docx §4.7 — scan for documents expiring within `windowDays`
+   * and notify HR admins (only once per document; tracked via expiryNotifiedAt).
+   */
+  async scanExpiringAndNotify(windowDays = 30) {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + windowDays * 24 * 60 * 60 * 1000);
+    const expiring = await this.prisma.document.findMany({
+      where: {
+        isDeleted: false,
+        isLatest: true,
+        expiresAt: { not: null, lte: cutoff, gt: now },
+        expiryNotifiedAt: null,
+      },
+      include: { employee: { select: { fullName: true } } },
+    });
+    if (!expiring.length) return { scanned: 0, notified: 0 };
+    const admins = await this.prisma.user.findMany({
+      where: { isActive: true, roles: { some: { code: 'admin' } } },
+      select: { id: true },
+    });
+    let notified = 0;
+    for (const doc of expiring) {
+      for (const admin of admins) {
+        await this.notifications.dispatch({
+          userId: admin.id,
+          subject: `Document expiring soon: ${doc.title}`,
+          message: `Document "${doc.title}" (owner: ${doc.employee.fullName}) expires on ${doc.expiresAt!.toISOString().slice(0, 10)}.`,
+          type: 'document.expiring',
+          channel: 'in_app',
+        });
+      }
+      await this.prisma.document.update({
+        where: { id: doc.id },
+        data: { expiryNotifiedAt: new Date() },
+      });
+      notified++;
+    }
+    return { scanned: expiring.length, notified };
   }
 
   async updateVersion(

@@ -294,9 +294,54 @@ export class EmployeeService {
   async bulkImport(employees: CreateEmployeeDTO[], user: any) {
     this.ensureDirectorAccess(user);
 
-    const results = [];
+    // charge.docx §4.1: emails and Employee IDs are unique system-wide.
+    // Pre-flight uniqueness check across the batch and against existing records.
+    const inboundEmails = employees
+      .map((e) => (e as any).personalEmail)
+      .filter(Boolean) as string[];
+    const seen = new Set<string>();
+    const duplicateInBatch = new Set<string>();
+    for (const e of inboundEmails) {
+      const norm = e.toLowerCase();
+      if (seen.has(norm)) duplicateInBatch.add(norm);
+      else seen.add(norm);
+    }
+    const existingUsers = inboundEmails.length
+      ? await this.prisma.user.findMany({
+          where: { email: { in: inboundEmails, mode: 'insensitive' } },
+          select: { email: true },
+        })
+      : [];
+    const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));
+
+    const results: Array<{
+      row: number;
+      success: boolean;
+      id?: string;
+      error?: string;
+      input?: any;
+    }> = [];
     for (let row = 0; row < employees.length; row++) {
       const emp = employees[row];
+      const email = ((emp as any).personalEmail as string | undefined)?.toLowerCase();
+      if (email && duplicateInBatch.has(email)) {
+        results.push({
+          row,
+          success: false,
+          error: `Duplicate email within batch: ${email}`,
+          input: emp,
+        });
+        continue;
+      }
+      if (email && existingEmails.has(email)) {
+        results.push({
+          row,
+          success: false,
+          error: `Email already exists: ${email}`,
+          input: emp,
+        });
+        continue;
+      }
       try {
         const result = await this.create(emp, user);
         results.push({ row, success: true, id: result?.id });

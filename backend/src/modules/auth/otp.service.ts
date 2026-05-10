@@ -32,9 +32,16 @@ export class OtpService {
     purpose: OtpPurpose,
     ttlHours: number = OTP_DEFAULT_TTL_HOURS,
   ): Promise<{ otp: string; expiresAt: Date }> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { employee: true },
+    });
     if (!user) throw new BadRequestException('User not found');
     if (!user.isActive) throw new BadRequestException('Cannot issue OTP for deactivated user');
+    // charge.docx §4.1: deactivated employees cannot receive OTP reset emails.
+    if (user.employee && user.employee.status === 'inactive') {
+      throw new BadRequestException('Cannot issue OTP for deactivated employee');
+    }
 
     // Invalidate any previous unused OTP for this purpose.
     await this.prisma.oneTimePassword.updateMany({

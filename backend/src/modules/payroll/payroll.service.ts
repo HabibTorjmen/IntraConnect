@@ -10,6 +10,7 @@ import { Prisma, PayrollRecord } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationService } from '../notification/notification.service';
 import { AuthHelpers } from '../../shared/helpers/auth.helpers';
 
 interface AccessContext {
@@ -22,6 +23,7 @@ export class PayrollService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    private notifications: NotificationService,
   ) {}
 
   async create(data: any) {
@@ -213,8 +215,20 @@ export class PayrollService {
     const r = await this.prisma.payrollRecord.update({
       where: { id },
       data: { status: 'published', publishedAt: new Date() },
+      include: { employee: { select: { userId: true, fullName: true } } },
     });
     await this.logAccess(id, actorUserId, 'publish', ctx);
+    // charge §4.8: notify employee that payslip is available (do not attach PDF).
+    if (r.employee?.userId) {
+      await this.notifications.dispatch({
+        userId: r.employee.userId,
+        subject: `Payslip available for ${r.period}`,
+        message: `Your payslip for ${r.period} is now available. Sign in to download it securely.`,
+        type: 'payroll.published',
+        channel: 'both',
+        critical: true,
+      });
+    }
     return r;
   }
 

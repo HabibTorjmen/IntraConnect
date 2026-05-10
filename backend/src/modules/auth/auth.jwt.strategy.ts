@@ -49,6 +49,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
     }
+    // charge.docx §4.1: deactivated employees lose access even if user.isActive lags.
+    if (user.employee && user.employee.status === 'inactive') {
+      throw new UnauthorizedException('Employee account is inactive');
+    }
 
     return user;
   }

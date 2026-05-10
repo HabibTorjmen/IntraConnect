@@ -148,6 +148,52 @@ export class DashboardService {
     });
   }
 
+  /** Admin: list all widgets including inactive ones — used by config screen. */
+  listAllWidgets() {
+    return this.prisma.dashboardWidget.findMany({ orderBy: { defaultOrder: 'asc' } });
+  }
+
+  /** Admin: deactivate a widget so it disappears from all role layouts. */
+  deactivateWidget(id: string) {
+    return this.prisma.dashboardWidget.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  /**
+   * charge.docx §4.13 — composite layout: user's saved order if any,
+   * otherwise the role defaults. Filters out inactive widgets.
+   */
+  async effectiveLayout(userId: string, role: string) {
+    const [available, saved] = await Promise.all([
+      this.listWidgets(role),
+      this.getMyLayout(userId),
+    ]);
+    const allowedKeys = new Set(available.map((w) => w.key));
+    const savedLayout = (saved?.layout as Array<{ key: string; order: number }>) ?? null;
+    if (savedLayout) {
+      const seen = new Set<string>();
+      const ordered: Array<{ key: string; order: number }> = [];
+      for (const item of savedLayout) {
+        if (allowedKeys.has(item.key) && !seen.has(item.key)) {
+          ordered.push(item);
+          seen.add(item.key);
+        }
+      }
+      // Append any new widgets the role gained that aren't yet in the saved layout.
+      for (const w of available) {
+        if (!seen.has(w.key)) {
+          ordered.push({ key: w.key, order: w.defaultOrder });
+        }
+      }
+      return ordered;
+    }
+    return available
+      .map((w) => ({ key: w.key, order: w.defaultOrder }))
+      .sort((a, b) => a.order - b.order);
+  }
+
   upsertWidget(data: {
     id?: string;
     key: string;

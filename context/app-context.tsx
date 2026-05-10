@@ -497,15 +497,60 @@ const defaultRoles: RoleRecord[] = [
       'users.manage',
       'roles.manage',
       'permissions.manage',
+      'employees.manage',
       'documents.manage',
       'tickets.manage',
       'leave.approve',
+      'leave.manage',
       'payroll.manage',
+      'attendance.manage',
+      'facility.manage',
       'settings.manage',
       'dashboard.read',
       'audit.read',
     ],
     memberCount: 1,
+    system: true,
+  },
+  {
+    id: 'role-hr',
+    name: 'HR',
+    code: 'hr',
+    description:
+      'HR Admin: employee lifecycle, leave/payroll/attendance/document operations (charge.docx §4.1, 4.3, 4.7, 4.8, 4.12)',
+    permissions: [
+      // Employee lifecycle
+      'employees.read',
+      'employees.manage',
+      'users.create',
+      'users.read',
+      'users.manage',
+      // Leave
+      'leave.read',
+      'leave.approve',
+      'leave.manage',
+      // Documents
+      'documents.read',
+      'documents.manage',
+      // Payroll (upload, publish, distribute)
+      'payroll.read',
+      'payroll.manage',
+      // Attendance (configure policy, correct records)
+      'attendance.read',
+      'attendance.manage',
+      // Help desk
+      'tickets.read',
+      'tickets.assign',
+      // Facility
+      'facility.read',
+      'facility.manage',
+      // Reporting
+      'dashboard.read',
+      'audit.read',
+      'training.manage',
+      'reports.read',
+    ],
+    memberCount: 0,
     system: true,
   },
   {
@@ -521,6 +566,8 @@ const defaultRoles: RoleRecord[] = [
       'tickets.manage',
       'tickets.assign',
       'documents.read',
+      'attendance.read',
+      'facility.read',
       'dashboard.read',
       'reports.read',
       'training.manage',
@@ -532,7 +579,7 @@ const defaultRoles: RoleRecord[] = [
     id: 'role-employee',
     name: 'Employee',
     code: 'employee',
-    description: 'Self-service requests and personal document access',
+    description: 'Self-service requests, facility reporting, and personal payslip/document access',
     permissions: [
       'profile.read',
       'profile.update',
@@ -541,6 +588,13 @@ const defaultRoles: RoleRecord[] = [
       'tickets.create',
       'tickets.read',
       'documents.read',
+      // charge.docx §4.5: employees can report facility issues
+      'facility.create',
+      'facility.read',
+      // charge.docx §4.8: employees view their own payslip
+      'payroll.read',
+      // charge.docx §4.12: employees see their own attendance
+      'attendance.read',
       'feedback.submit',
       'tools.read',
     ],
@@ -683,6 +737,26 @@ function buildDefaultState(): AppState {
   })
 }
 
+/**
+ * Merge stored system roles with the latest defaults so that existing demo
+ * users automatically receive new system roles (e.g. HR) and refreshed
+ * permission lists without needing to clear localStorage.
+ */
+function mergeSystemRoles(storedRoles: RoleRecord[]): RoleRecord[] {
+  const byCode = new Map<string, RoleRecord>()
+  storedRoles.forEach(r => byCode.set(r.code, r))
+  defaultRoles.forEach(def => {
+    const existing = byCode.get(def.code)
+    if (!existing) {
+      byCode.set(def.code, def)
+    } else if (def.system) {
+      // Refresh permissions on system roles to match the latest defaults.
+      byCode.set(def.code, { ...existing, permissions: def.permissions, system: true })
+    }
+  })
+  return Array.from(byCode.values())
+}
+
 function readAppState(): AppState {
   if (typeof window === 'undefined') return buildDefaultState()
 
@@ -690,12 +764,13 @@ function readAppState(): AppState {
   if (!stored) return buildDefaultState()
 
   try {
-    return {
-      ...synchronizeRoles({
-        ...buildDefaultState(),
-        ...JSON.parse(stored),
-      }),
+    const parsed = JSON.parse(stored) as Partial<AppState>
+    const merged: AppState = {
+      ...buildDefaultState(),
+      ...parsed,
+      roles: mergeSystemRoles(parsed.roles ?? []),
     }
+    return synchronizeRoles(merged)
   } catch {
     return buildDefaultState()
   }

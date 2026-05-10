@@ -33,6 +33,10 @@ export class NotificationService {
     if (!user || !user.isActive) {
       return { skipped: true, reason: 'inactive_or_missing' };
     }
+    // charge.docx §Cross-Module: deactivated employees do not receive notifications.
+    if (user.employee && user.employee.status !== 'active') {
+      return { skipped: true, reason: 'employee_inactive' };
+    }
     const channel = input.critical ? 'both' : input.channel ?? 'in_app';
     const created: any[] = [];
 

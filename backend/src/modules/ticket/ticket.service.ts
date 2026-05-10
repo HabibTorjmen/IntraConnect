@@ -7,6 +7,7 @@ import {
 import { Prisma, Ticket } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   bumpPriority,
   classifyStatus,
@@ -35,19 +36,68 @@ export class TicketService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    private notifications: NotificationService,
   ) {}
+
+  /** Resolve the User.id behind an Employee.id (for notification dispatch). */
+  private async userIdForEmployee(employeeId: string): Promise<string | null> {
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { userId: true },
+    });
+    return emp?.userId ?? null;
+  }
+
+  private async notifyAdmins(input: {
+    subject: string;
+    message: string;
+    type: string;
+    critical?: boolean;
+  }) {
+    const admins = await this.prisma.user.findMany({
+      where: { isActive: true, roles: { some: { code: 'admin' } } },
+      select: { id: true },
+    });
+    await Promise.all(
+      admins.map((a) =>
+        this.notifications.dispatch({
+          userId: a.id,
+          subject: input.subject,
+          message: input.message,
+          type: input.type,
+          critical: input.critical,
+          channel: input.critical ? 'both' : 'in_app',
+        }),
+      ),
+    );
+  }
 
   async create(data: Prisma.TicketUncheckedCreateInput): Promise<Ticket> {
     if (!data.priority) data.priority = 'medium';
     if (!data.status) data.status = 'new';
     if (!data.slaDeadline) data.slaDeadline = deadlineFor(data.priority);
-    return this.prisma.ticket.create({
+    if (data.assignedToId && !data.assignedAt) data.assignedAt = new Date();
+    const ticket = await this.prisma.ticket.create({
       data,
       include: {
         category: true,
         employee: { select: { fullName: true } },
       },
     });
+    // charge §4.4: agents must be notified within 2 minutes of assignment.
+    if (ticket.assignedToId) {
+      const userId = await this.userIdForEmployee(ticket.assignedToId);
+      if (userId) {
+        await this.notifications.dispatch({
+          userId,
+          subject: `Ticket assigned: ${ticket.title}`,
+          message: `You have been assigned ticket #${ticket.id} (priority: ${ticket.priority}).`,
+          type: 'ticket.assigned',
+          channel: 'both',
+        });
+      }
+    }
+    return ticket;
   }
 
   async findAll(params: {
@@ -129,7 +179,17 @@ export class TicketService {
         )
       : 'ON_TRACK';
 
-    return this.prisma.ticket.update({
+    // Track assignment timestamp when assignee changes.
+    const newAssignee = (data as any).assignedToId as string | undefined;
+    const assigneeChanged =
+      newAssignee !== undefined && newAssignee !== before.assignedToId;
+    const assignedAt = assigneeChanged
+      ? newAssignee
+        ? new Date()
+        : null
+      : before.assignedAt;
+
+    const updated = await this.prisma.ticket.update({
       where: { id },
       data: {
         ...data,
@@ -138,6 +198,7 @@ export class TicketService {
         slaDeadline,
         slaStatus,
         closedAt,
+        assignedAt,
       },
       include: {
         category: true,
@@ -145,6 +206,38 @@ export class TicketService {
         assignedTo: { select: { fullName: true } },
       },
     });
+
+    if (assigneeChanged && newAssignee) {
+      const userId = await this.userIdForEmployee(newAssignee);
+      if (userId) {
+        await this.notifications.dispatch({
+          userId,
+          subject: `Ticket assigned: ${updated.title}`,
+          message: `You have been assigned ticket #${updated.id} (priority: ${updated.priority}).`,
+          type: 'ticket.assigned',
+          channel: 'both',
+        });
+      }
+    }
+
+    // Notify creator on resolution.
+    if (
+      before.status !== updated.status &&
+      (updated.status === 'resolved' || updated.status === 'closed')
+    ) {
+      const creatorUserId = await this.userIdForEmployee(updated.employeeId);
+      if (creatorUserId) {
+        await this.notifications.dispatch({
+          userId: creatorUserId,
+          subject: `Ticket ${updated.status}: ${updated.title}`,
+          message: `Your ticket #${updated.id} has been marked ${updated.status}.`,
+          type: 'ticket.resolved',
+          channel: 'in_app',
+        });
+      }
+    }
+
+    return updated;
   }
 
   async remove(id: string): Promise<Ticket> {
@@ -263,6 +356,41 @@ export class TicketService {
           },
         });
         escalated++;
+        // charge §4.4: SLA breach must notify admin + assignee.
+        await this.notifyAdmins({
+          subject: `SLA breach on ticket "${t.title}"`,
+          message: `Ticket #${t.id} breached its SLA. Priority bumped to ${newPriority}; escalation level ${t.escalationLevel + 1}.`,
+          type: 'ticket.sla_breach',
+          critical: true,
+        });
+        if (t.assignedToId) {
+          const assigneeUserId = await this.userIdForEmployee(t.assignedToId);
+          if (assigneeUserId) {
+            await this.notifications.dispatch({
+              userId: assigneeUserId,
+              subject: `Ticket SLA breached: ${t.title}`,
+              message: `Ticket #${t.id} you are assigned to has breached its SLA. Priority is now ${newPriority}.`,
+              type: 'ticket.sla_breach',
+              critical: true,
+              channel: 'both',
+            });
+          }
+        }
+      } else if (status === 'NEAR_BREACH' && t.slaStatus !== 'NEAR_BREACH' && t.assignedToId) {
+        await this.prisma.ticket.update({
+          where: { id: t.id },
+          data: { slaStatus: status },
+        });
+        const assigneeUserId = await this.userIdForEmployee(t.assignedToId);
+        if (assigneeUserId) {
+          await this.notifications.dispatch({
+            userId: assigneeUserId,
+            subject: `Ticket near SLA breach: ${t.title}`,
+            message: `Ticket #${t.id} is approaching its SLA deadline.`,
+            type: 'ticket.sla_warning',
+            channel: 'in_app',
+          });
+        }
       } else if (t.slaStatus !== status) {
         await this.prisma.ticket.update({
           where: { id: t.id },

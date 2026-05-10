@@ -96,6 +96,37 @@ export class LeaveController {
     return this.leaveService.historyForEmployee(employeeId);
   }
 
+  // charge §4.3 — Team & organization calendar (admin/manager view).
+  @Get('calendar')
+  @CheckPermissions({ action: 'read', module: 'leave' })
+  async calendar(
+    @AuthUser() user: any,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('type') type?: string,
+    @Query('includePending') includePending?: string,
+  ) {
+    if (!from || !to) {
+      throw new Error('from and to query params are required (ISO dates).');
+    }
+    const isPowerful = user.roles.some((role: any) =>
+      ['admin', 'manager'].includes(role.name),
+    );
+    // Managers default-scoped to their own department unless they pass departmentId.
+    const scopedDept =
+      isPowerful && user.roles.some((r: any) => r.name === 'manager') && !departmentId
+        ? user.employee?.departmentId
+        : departmentId;
+    return this.leaveService.calendar({
+      from: new Date(from),
+      to: new Date(to),
+      departmentId: scopedDept,
+      type,
+      includePending: includePending === 'true',
+    });
+  }
+
   // ------- Requests -------
   @Post()
   @CheckPermissions({ action: 'create', module: 'leave' })
@@ -130,9 +161,30 @@ export class LeaveController {
   @CheckPermissions({ action: 'approve', module: 'leave' })
   async updateStatus(
     @Param('id') id: string,
-    @Body() data: UpdateLeaveStatusDTO,
+    @Body() data: UpdateLeaveStatusDTO & { rejectionReason?: string },
+    @AuthUser() user: any,
   ) {
+    if (data.status === 'APPROVED' || data.status === 'REJECTED') {
+      return this.leaveService.processDecision(
+        id,
+        user.id,
+        data.status as any,
+        data.rejectionReason,
+      );
+    }
     return this.leaveService.updateStatus(id, data.status);
+  }
+
+  // charge §4.3 — modifying a pending request restarts approval.
+  @Patch(':id/modify')
+  @CheckPermissions({ action: 'create', module: 'leave' })
+  async modify(
+    @Param('id') id: string,
+    @Body() data: { startDate?: string; endDate?: string; reason?: string },
+    @AuthUser() user: any,
+  ) {
+    const isAdmin = user.roles.some((role: any) => role.name === 'admin');
+    return this.leaveService.modifyPending(id, user.employee?.id, isAdmin, data);
   }
 
   @Post(':id/cancel')

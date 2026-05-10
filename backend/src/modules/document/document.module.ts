@@ -1,13 +1,16 @@
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { ScheduleModule } from '@nestjs/schedule';
 import { DocumentController } from './document.controller';
 import { DocumentService } from './document.service';
+import { DocumentExpiryScheduler } from './document.scheduler';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
     PrismaModule,
+    ScheduleModule.forRoot(),
     MulterModule.register({
       storage: memoryStorage(),
       limits: {
@@ -16,7 +19,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     }),
   ],
   controllers: [DocumentController],
-  providers: [DocumentService],
+  providers: [DocumentService, DocumentExpiryScheduler],
   exports: [DocumentService],
 })
 export class DocumentModule {}

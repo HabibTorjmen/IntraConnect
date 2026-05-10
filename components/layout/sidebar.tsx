@@ -72,21 +72,6 @@ export default function Sidebar({ activeModule, setActiveModule, userRole }: Sid
           </Button>
         )}
 
-        {(userRole === 'admin' || userRole === 'manager') && (
-          <Button
-            variant={activeModule === 'employee-new' ? 'default' : 'ghost'}
-            className={`w-full justify-start gap-3 ${
-              activeModule === 'employee-new'
-                ? 'bg-blue-600 hover:bg-blue-700'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => setActiveModule('employee-new')}
-          >
-            <UserPlus size={20} />
-            Add Employee
-          </Button>
-        )}
-
         {userRole === 'admin' && (
           <>
             <div className="mt-8 mb-4 border-t border-slate-700 pt-4"></div>

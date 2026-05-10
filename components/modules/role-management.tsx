@@ -18,15 +18,43 @@ const permissionGroups = [
   },
   {
     title: 'HR & Leave',
-    permissions: ['employees.read', 'leave.create', 'leave.read', 'leave.approve', 'training.manage'],
+    permissions: [
+      'employees.read',
+      'employees.manage',
+      'leave.create',
+      'leave.read',
+      'leave.approve',
+      'leave.manage',
+      'training.manage',
+    ],
   },
   {
     title: 'Support & Documents',
-    permissions: ['tickets.create', 'tickets.read', 'tickets.assign', 'tickets.manage', 'documents.read', 'documents.manage'],
+    permissions: [
+      'tickets.create',
+      'tickets.read',
+      'tickets.assign',
+      'tickets.manage',
+      'documents.read',
+      'documents.manage',
+    ],
+  },
+  {
+    title: 'Facility',
+    permissions: ['facility.create', 'facility.read', 'facility.manage'],
+  },
+  {
+    title: 'Payroll & Attendance',
+    permissions: [
+      'payroll.read',
+      'payroll.manage',
+      'attendance.read',
+      'attendance.manage',
+    ],
   },
   {
     title: 'Business Operations',
-    permissions: ['payroll.manage', 'reports.read', 'dashboard.read', 'audit.read', 'settings.manage'],
+    permissions: ['reports.read', 'dashboard.read', 'audit.read', 'settings.manage'],
   },
   {
     title: 'Self Service',

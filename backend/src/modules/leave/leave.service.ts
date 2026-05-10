@@ -6,6 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateLeaveDTO, LeaveStatus } from './dto/leave.dto';
 import {
   countWorkingDays,
@@ -15,7 +17,22 @@ import {
 
 @Injectable()
 export class LeaveService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationService,
+    private audit: AuditService,
+  ) {}
+
+  private async getApproverContext(approverUserId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: approverUserId },
+      include: { roles: true, employee: true },
+    });
+    if (!user) throw new NotFoundException('Approver user not found');
+    const isAdmin = user.roles.some((r) => r.code === 'admin');
+    const isManager = user.roles.some((r) => r.code === 'manager');
+    return { user, isAdmin, isManager };
+  }
 
   private async resolveTypeAndPolicy(typeCodeOrId: string) {
     const leaveType =
@@ -100,7 +117,7 @@ export class LeaveService {
       }
     }
 
-    return this.prisma.leaveRequest.create({
+    const created = await this.prisma.leaveRequest.create({
       data: {
         startDate: start,
         endDate: end,
@@ -111,7 +128,39 @@ export class LeaveService {
         employee: { connect: { id: data.employeeId } },
         leaveType: leaveType ? { connect: { id: leaveType.id } } : undefined,
       },
+      include: { employee: { include: { manager: true } } },
     });
+
+    // charge §4.3: Employee → Direct Manager. Notify manager (if any).
+    const managerUserId = created.employee.manager?.userId ?? null;
+    if (managerUserId) {
+      await this.notifications.dispatch({
+        userId: managerUserId,
+        subject: `Leave request from ${created.employee.fullName}`,
+        message: `${created.employee.fullName} requested ${workingDays} working day(s) of ${created.type} leave from ${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}.`,
+        type: 'leave.submitted',
+        channel: 'both',
+      });
+    } else {
+      // No direct manager — fall through to admins.
+      const admins = await this.prisma.user.findMany({
+        where: { isActive: true, roles: { some: { code: 'admin' } } },
+        select: { id: true },
+      });
+      await Promise.all(
+        admins.map((a) =>
+          this.notifications.dispatch({
+            userId: a.id,
+            subject: `Leave request needs review`,
+            message: `${created.employee.fullName} submitted a leave request and has no direct manager assigned.`,
+            type: 'leave.submitted',
+            channel: 'in_app',
+          }),
+        ),
+      );
+    }
+
+    return created;
   }
 
   async findAll() {
@@ -130,10 +179,167 @@ export class LeaveService {
     return leave;
   }
 
+  /**
+   * charge.docx §4.3 — process approval/rejection.
+   * Allowed actors:
+   *   - The direct manager of the requestor (manager role + manager.userId === approver)
+   *   - Any user with admin role (HR override)
+   */
+  async processDecision(
+    id: string,
+    approverUserId: string,
+    decision: LeaveStatus.APPROVED | LeaveStatus.REJECTED,
+    rejectionReason?: string,
+  ) {
+    const leave = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: { employee: { include: { manager: true } } },
+    });
+    if (!leave) throw new NotFoundException('Leave request not found');
+    if (leave.status !== LeaveStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot decide on a ${leave.status} request. Modify it first to restart approval.`,
+      );
+    }
+
+    const ctx = await this.getApproverContext(approverUserId);
+    const isDirectManager =
+      !!leave.employee.manager &&
+      leave.employee.manager.userId === approverUserId;
+    if (!ctx.isAdmin && !isDirectManager) {
+      throw new ForbiddenException(
+        'Only the direct manager or an admin can decide this leave request.',
+      );
+    }
+
+    if (decision === LeaveStatus.REJECTED && !rejectionReason) {
+      throw new BadRequestException('A rejection reason is required.');
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        status: decision,
+        approvedById: approverUserId,
+        managerApprovalAt: isDirectManager ? now : leave.managerApprovalAt ?? null,
+        decidedAt: now,
+        rejectionReason: decision === LeaveStatus.REJECTED ? rejectionReason : null,
+      },
+      include: { employee: true },
+    });
+
+    await this.audit.log({
+      action: decision === LeaveStatus.APPROVED ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED',
+      userId: approverUserId,
+      module: 'leave',
+      resourceId: id,
+      oldValue: { status: leave.status },
+      newValue: { status: decision, rejectionReason: updated.rejectionReason },
+    });
+
+    // Notify the requestor.
+    if (updated.employee.userId) {
+      await this.notifications.dispatch({
+        userId: updated.employee.userId,
+        subject:
+          decision === LeaveStatus.APPROVED
+            ? 'Leave request approved'
+            : 'Leave request rejected',
+        message:
+          decision === LeaveStatus.APPROVED
+            ? `Your leave from ${updated.startDate.toISOString().slice(0, 10)} to ${updated.endDate.toISOString().slice(0, 10)} has been approved.`
+            : `Your leave request was rejected. Reason: ${rejectionReason}`,
+        type: 'leave.decision',
+        channel: 'both',
+        critical: decision === LeaveStatus.REJECTED,
+      });
+    }
+
+    return updated;
+  }
+
+  /** Legacy method: kept for any existing callers. Prefer processDecision. */
   async updateStatus(id: string, status: LeaveStatus) {
     return this.prisma.leaveRequest.update({
       where: { id },
-      data: { status },
+      data: { status, decidedAt: new Date() },
+    });
+  }
+
+  /**
+   * charge.docx §4.3 — modifying a pending request restarts approval.
+   * Only the requestor (or admin) may modify a pending request.
+   */
+  async modifyPending(
+    id: string,
+    requesterEmployeeId: string,
+    isAdmin: boolean,
+    patch: { startDate?: string; endDate?: string; reason?: string },
+  ) {
+    const leave = await this.prisma.leaveRequest.findUnique({ where: { id } });
+    if (!leave) throw new NotFoundException('Leave request not found');
+    if (!isAdmin && leave.employeeId !== requesterEmployeeId) {
+      throw new ForbiddenException('Cannot modify another employee\'s request');
+    }
+    if (leave.status !== LeaveStatus.PENDING) {
+      throw new BadRequestException('Only pending requests can be modified');
+    }
+    const startDate = patch.startDate ? new Date(patch.startDate) : leave.startDate;
+    const endDate = patch.endDate ? new Date(patch.endDate) : leave.endDate;
+    if (endDate < startDate) {
+      throw new BadRequestException('endDate must be on or after startDate');
+    }
+    return this.prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        startDate,
+        endDate,
+        reason: patch.reason ?? leave.reason,
+        // reset approval stage — restart full workflow
+        approvedById: null,
+        managerApprovalAt: null,
+        decidedAt: null,
+      },
+    });
+  }
+
+  /**
+   * charge.docx §4.3 — Team & organization leave calendar.
+   * Returns leaves intersecting the [from, to] window with optional filters.
+   */
+  async calendar(opts: {
+    from: Date;
+    to: Date;
+    departmentId?: string;
+    type?: string;
+    includePending?: boolean;
+  }) {
+    const statuses: string[] = [LeaveStatus.APPROVED];
+    if (opts.includePending) statuses.push(LeaveStatus.PENDING);
+    return this.prisma.leaveRequest.findMany({
+      where: {
+        status: { in: statuses },
+        startDate: { lte: opts.to },
+        endDate: { gte: opts.from },
+        ...(opts.type ? { type: opts.type } : {}),
+        ...(opts.departmentId
+          ? { employee: { departmentId: opts.departmentId } }
+          : {}),
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            departmentId: true,
+            department: { select: { name: true } },
+            jobTitle: { select: { title: true } },
+          },
+        },
+        leaveType: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: { startDate: 'asc' },
     });
   }
 

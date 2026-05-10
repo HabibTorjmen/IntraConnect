@@ -123,6 +123,32 @@ export class DocumentController {
     );
   }
 
+  // charge.docx §4.7 — full-text search across documents (under 2 s target).
+  @Get('search')
+  @CheckPermissions({ action: 'read', module: 'documents' })
+  search(
+    @Query('q') q?: string,
+    @Query('type') type?: string,
+    @Query('category') category?: string,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.documentService.search({
+      q,
+      type,
+      category,
+      skip: skip ? parseInt(skip, 10) : undefined,
+      take: take ? parseInt(take, 10) : undefined,
+    });
+  }
+
+  // charge.docx §4.7 — bulk permission update (admin only).
+  @Post('bulk-visibility')
+  @CheckPermissions({ action: 'manage', module: 'documents' })
+  bulkVisibility(@Body() body: { ids: string[]; isPublic: boolean }) {
+    return this.documentService.bulkUpdateVisibility(body.ids, body.isPublic);
+  }
+
   @Get(':id')
   @CheckPermissions({ action: 'read', module: 'documents' })
   async findOne(@Param('id') id: string) {

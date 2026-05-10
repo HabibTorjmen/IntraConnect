@@ -27,11 +27,13 @@ import AdminSettings from '@/components/modules/admin-settings'
 import RoleManagement from '@/components/modules/role-management'
 import TimeTracking from '@/components/modules/time-tracking'
 import LeaveConfig from '@/components/modules/leave-config'
+import AdminLeaves from '@/components/modules/admin-leaves'
 
 export default function MainLayout() {
   const { user, logout } = useContext(AuthContext)
   const [activeModule, setActiveModule] = useState('dashboard')
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null)
+  const [creatingEmployee, setCreatingEmployee] = useState(false)
   const { isDemoMode } = useContext(AppContext)
 
   if (!user) return null
@@ -41,23 +43,21 @@ export default function MainLayout() {
       case 'dashboard':
         return <Dashboard />
       case 'employees':
-        return editingEmployeeId ? (
+        return editingEmployeeId || creatingEmployee ? (
           <EmployeeForm
-            employeeId={editingEmployeeId}
-            onClose={() => setEditingEmployeeId(null)}
+            employeeId={editingEmployeeId ?? undefined}
+            onClose={() => { setEditingEmployeeId(null); setCreatingEmployee(false) }}
           />
         ) : (
-          <EmployeeList onEditEmployee={setEditingEmployeeId} />
-        )
-      case 'employee-new':
-        return (
-          <EmployeeForm
-            onClose={() => setActiveModule('employees')}
+          <EmployeeList
+            onEditEmployee={setEditingEmployeeId}
+            onAddEmployee={() => setCreatingEmployee(true)}
           />
         )
       case 'directory':
         return <StaffDirectory />
       case 'leaves':
+        if (user.role === 'admin') return <AdminLeaves />
         return user.role === 'manager' ? (
           <LeaveRequests />
         ) : (
